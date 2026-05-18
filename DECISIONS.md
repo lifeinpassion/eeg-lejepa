@@ -97,6 +97,45 @@ A running log of consequential decisions made during the project. Each entry: da
 **Decision:** `num_slices=256` for SIGReg on M1; bump to `1024` on AutoDL.
 **Why:** Paper notes SIGReg is largely insensitive to the number of slices. 256 keeps each forward pass fast on MPS during dev; 1024 (paper default) is fine on a GPU.
 
+## 2026-05-18 — Session 3: training infrastructure
+
+**Decision:** Functional `train()` function rather than a Trainer class.
+**Why:** Less ceremony, easier to test, no hidden state across runs. The function takes model + loader + cfg and returns a dict pointing to CSV log + checkpoint.
+
+**Decision:** Default `deterministic=False` in `set_global_seed()`. Was True.
+**Why:** On MPS, `torch.use_deterministic_algorithms(True)` forces CPU fallbacks for `sort` and SDPA, which dominated the 4-second forward time observed in Session 2. Reproducibility is still available via explicit opt-in for debugging runs.
+
+**Decision:** Optimizer + schedule. AdamW (lr=1e-3, wd=0.05, betas=(0.9, 0.95)), cosine LR with linear warmup over 30 steps, min_lr_ratio=0.1.
+**Why:** Standard small-transformer pretraining recipe. LeJEPA paper notes no LR scheduler is strictly required, but warmup avoids early SIGReg instability when embeddings are still wildly non-isotropic.
+
+**Decision:** Per-channel z-score is applied at data-construction time (in `build_eegmmidb_pretraining_tensor`), not as a layer in the model.
+**Why:** Cheap, deterministic, and keeps the runtime path simple. If we later need on-the-fly augmentation (e.g., time-shift, channel masking), it goes between the tensor and the model in a `transforms` callable.
+
+**Decision:** CSV + matplotlib logging instead of wandb.
+**Why:** Zero external deps, works offline, easy to diff across runs. We'll add wandb later if we want to compare many runs at once or share dashboards.
+
+**Decision:** Embedding diagnostics tracked alongside losses: `|mean|`, `std`, off-diagonal covariance, embedding norm. Targets are (0, 1, 0, √D) under isotropic N(0, I).
+**Why:** Loss values alone don't tell us whether SIGReg is actually working. Distribution stats do — they should monotonically approach the targets even if the prediction loss plateaus.
+
+## 2026-05-18 — Session 3 results: SIGReg weight calibration on EEGMMIDB
+
+**Decision:** Set default `sigreg_weight` = 1.0 (was 0.1 per paper default). Set default `sigreg_num_slices` = 1024 (was 256).
+**Why:** First 100-step run with λ=0.1 showed clear representational collapse: `pred_loss` cratered from 1.8 → 0.04 in 20 steps (suspiciously fast), `sigreg_loss` *grew* from 0.18 → 1.88 (10×), `off-diag` covariance climbed from 0.16 → 0.60. The model was finding a trivial low-rank prediction shortcut and SIGReg's weighted contribution (≈0.19) was too small to overcome the prediction-shortcut savings (≈1.74).
+
+**Three-run sweep on subjects 1-3, 200 steps each:**
+
+| Config | pred final | sigreg final | off-diag final | grad-norm | Verdict |
+|--------|-----------|--------------|----------------|-----------|---------|
+| λ=0.1, slices=256, pred-depth=4   | **0.04**   | **1.88** ↑  | **0.60** ↑    | 0.5-1.5  | Collapsed |
+| λ=1.0, slices=1024, pred-depth=4  | 0.29       | 0.33 (flat) | 0.22 (slow ↓) | 0.5-1.5  | **Healthy** ✓ |
+| λ=5.0, slices=1024, pred-depth=2  | 0.77       | 0.14 (flat) | 0.13 (slow ↓) | 1-44 spikes | Over-constrained; jittery |
+
+λ=1.0 is the production sweet spot: pred loss reaches a non-trivial plateau, SIGReg holds steady, off-diag is bounded and slowly decreasing, gradients are stable. λ=5.0 demonstrates the regularization *can* fully dominate if needed, but at the cost of optimization stability — useful as an ablation, not a default.
+
+**Revisit when:** We scale batch on AutoDL. The paper's λ=0.1 was tuned on ImageNet with B=256+; our 8× scale-down naturally argues for ~10× more weight on SIGReg to compensate for noisier distribution estimates. If we bump to B=64 on AutoDL, λ may need to come back toward 0.5 or even 0.1.
+
+**Caveat:** Healthy training metrics ≠ good downstream representations. The real test is linear-probe accuracy on standard EEG benchmarks (TUH-Events, SEED, BCI-IV) — that's Session 4 / Phase 1.5. We may discover that λ=5.0's more isotropic embeddings probe better even though they look "worse" by training-loss standards.
+
 ---
 
 *Future entries below.*

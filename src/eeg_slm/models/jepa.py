@@ -33,8 +33,10 @@ from eeg_slm.models.sigreg import SIGReg
 class EEGLeJEPAConfig:
     encoder: EncoderConfig = field(default_factory=EncoderConfig)
     predictor: PredictorConfig = field(default_factory=PredictorConfig)
-    sigreg_weight: float = 0.1
-    sigreg_num_slices: int = 256
+    sigreg_weight: float = 1.0     # paper default 0.1 → too weak at our small batch (B=8);
+                                   # 1.0 produces clean training on EEGMMIDB with batch 8.
+                                   # Revisit when scaling batch on AutoDL.
+    sigreg_num_slices: int = 1024  # paper default. 256 also works but converges slightly less smoothly.
 
 
 class EEGLeJEPA(nn.Module):

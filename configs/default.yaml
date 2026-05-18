@@ -29,6 +29,14 @@ preprocessing:
 training:
   seed: 42
   device: auto           # auto picks cuda > mps > cpu
+  n_steps: 300
+  batch_size: 8
+  learning_rate: 1.0e-3
+  weight_decay: 0.05
+  warmup_steps: 30
+  grad_clip: 1.0
+  log_every: 10
+  ckpt_every: 0          # 0 = save only at end; positive = save every N steps
 
 reproducibility:
   deterministic: true

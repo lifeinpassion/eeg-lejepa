@@ -6,7 +6,7 @@ import os
 import random
 
 
-def set_global_seed(seed: int, deterministic: bool = True) -> None:
+def set_global_seed(seed: int, deterministic: bool = False) -> None:
     """Set seeds across Python, NumPy, and PyTorch.
 
     Parameters
@@ -15,8 +15,10 @@ def set_global_seed(seed: int, deterministic: bool = True) -> None:
         Integer seed to set.
     deterministic
         If True, force deterministic algorithms in PyTorch where possible.
-        This may slow training and is not guaranteed to be bit-exact across
-        devices (especially MPS), but it's still useful for debugging.
+        Default is False because on MPS this triggers CPU fallbacks for
+        ops like sort and SDPA, which can slow forward passes by 10-100x.
+        Set to True explicitly when you need bit-exact reproducibility for
+        debugging (and accept the speed cost).
     """
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)

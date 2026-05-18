@@ -3,7 +3,7 @@
 PY := python
 PIP := pip
 
-.PHONY: help setup setup-dev clean download explore forward lint test info
+.PHONY: help setup setup-dev clean download explore forward profile train lint test info
 
 help:
 	@echo "Available targets:"
@@ -12,6 +12,8 @@ help:
 	@echo "  download    - Download initial EEG dataset (PhysioNet EEGMMIDB)"
 	@echo "  explore     - Run the first-look exploration script"
 	@echo "  forward     - Run EEGLeJEPA forward + backward on real EEG (Session 2)"
+	@echo "  profile     - Profile forward/backward timing on the active device"
+	@echo "  train       - Pretrain EEGLeJEPA on EEGMMIDB (Session 3, default 300 steps)"
 	@echo "  lint        - Run ruff"
 	@echo "  test        - Run pytest"
 	@echo "  info        - Show environment info"
@@ -31,6 +33,12 @@ explore:
 
 forward:
 	$(PY) scripts/03_model_forward.py
+
+profile:
+	$(PY) scripts/03b_profile_forward.py
+
+train:
+	$(PY) scripts/04_train.py
 
 lint:
 	ruff check src tests scripts
