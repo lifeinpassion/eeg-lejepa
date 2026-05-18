@@ -79,6 +79,24 @@ A running log of consequential decisions made during the project. Each entry: da
 **Also added:** `zscore_per_channel(x)` helper. This is the model-input convention we'll use in Phase 1 (matches EEGPT's input preprocessing).
 **Revisit if:** We want to preserve absolute amplitude information for downstream tasks where it matters (e.g., seizure detection where signal magnitude correlates with severity). In that case, a per-channel scale factor learned during pretraining is the right approach.
 
+## 2026-05-18 — Session 2: Phase 1 architecture commitments
+
+**Decision:** EEGLeJEPA = per-patch independent encoder + causal-Transformer predictor + SIGReg. No EMA, no stop-gradient, no teacher network — single shared encoder produces both inputs and targets. Single regularization weight λ = 0.1.
+**Why:** Faithful to LeJEPA/LeWorldModel theory; one hyperparameter; demonstrably stable on a tiny GPU per the paper. For EEG specifically, the per-frame-independent encoder design maps cleanly to per-patch processing.
+**Component-by-component:**
+- **Encoder:** Conv1d patch embed (kernel=stride=40 samples = 200 ms at 200 Hz) → sinusoidal pos embed → 2-layer per-patch MLP → `nn.BatchNorm1d`. NO cross-patch attention — would leak future info into the prediction target. Unit test enforces this property.
+- **Predictor:** 4-layer causal Transformer (dim=192, heads=4, mlp_ratio=4, dropout=0.1) → `nn.BatchNorm1d`. Trained via MSE in raw embedding space against `encoder(x)[:, 1:]`.
+- **SIGReg:** Cramér-von Mises on 256 random unit-vector projections per call. CvM chosen over Epps-Pulley for the cleanest first implementation (closed-form, sort-based, verifiable against scipy). Epps-Pulley deferred as an ablation.
+- **BatchNorm everywhere the embedding meets a loss.** LayerNorm at the output would force per-sample unit norm and destroy SIGReg — the paper is explicit. We use LayerNorm internally inside transformer blocks (which is fine) and BatchNorm at the encoder/predictor output projectors.
+**Revisit if:** Training is unstable (try smaller λ, more projections, or switch to Epps-Pulley); or if downstream evaluation reveals the encoder is under-parameterized (add per-patch depth or per-channel attention within a patch).
+
+**Decision:** Phase 1 prototype targets ~1-3M params total. Encoder ~500K-1M, predictor ~1-2M. Comfortable on 8 GB M1 dev.
+**Why:** Validates the architecture and training loop end-to-end before spending AutoDL hours on a production-scale run. Real EEG-FM scale (5-50M params, à la EEGPT/LaBraM) comes after Phase 1 is proven.
+**Revisit when:** Phase 1 is training stably and we move to Phase 1.5 (scale up) on AutoDL.
+
+**Decision:** `num_slices=256` for SIGReg on M1; bump to `1024` on AutoDL.
+**Why:** Paper notes SIGReg is largely insensitive to the number of slices. 256 keeps each forward pass fast on MPS during dev; 1024 (paper default) is fine on a GPU.
+
 ---
 
 *Future entries below.*
