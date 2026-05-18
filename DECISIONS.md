@@ -263,6 +263,46 @@ Chance: left_right 0.506, rest_vs_activity 0.500.
 4. A second benchmark dataset (BCI-IV-2a or TUH-EEG abnormal-detection).
 5. Supervised-baseline comparison (train EEGLeJEPA + classification head from scratch).
 
+## 2026-05-18 — Session 5 extension: 5000-step 20-subject pretraining widens the gap
+
+**Setup:** Same hyperparameters as the 1000-step run (λ=1.0, num_slices=256, predictor.depth=4, batch=8). Pretrained for 5000 steps on subjects 1-20 × MI runs (4, 8, 12). ~33 minutes on M1 MPS (0.4 s/step warm).
+
+**Training trajectory:**
+
+| Step | pred_loss | sigreg | off-diag |
+|------|-----------|--------|----------|
+|    0 | 1.78 | 0.14 | 0.14 |
+| 1000 | 0.19 | 0.29 | 0.19 |
+| 2000 | 0.13 | 0.28 | 0.19 |
+| 3000 | 0.087 | 0.26 | 0.19 |
+| 5000 | **0.046** | 0.26 | 0.19 |
+
+Pred loss continued to drop ~4× from step 1000 to step 5000; sigreg and off-diag stayed at their step-1000 equilibrium values. No instability, no collapse.
+
+**Probe progression across the project:**
+
+| Pretraining | left_right enc Δ | rest_vs_activity enc Δ | best AUC (rva) |
+|-------------|--------------------|-------------------------|----------------|
+| 3 subj / 200 steps  | +1.5 | ~0  | 0.692 |
+| 20 subj / 1000 steps | +4.4 | +6.8 | 0.694 |
+| 20 subj / 5000 steps | **+7.9** | **+8.8** | **0.721 (enc) / 0.740 (both)** |
+
+The gap widens monotonically with both more subjects AND more steps — a small-scale scaling-law finding.
+
+**Headline numbers (current best):**
+- Rest vs activity: 66.6% accuracy, **0.740 AUC** (both_mean), Δ=+2.8 pp / +0.10 AUC vs random
+- Left vs right: 59.0% accuracy, **0.625 AUC** (encoder_mean), Δ=+7.9 pp / +0.13 AUC vs random
+- All on cross-subject LOSO, 20 folds.
+
+**Corrections to prior claims:**
+- The "predictor is useless for downstream" claim from earlier today is now superseded a second time. At 5000 steps, predictor_mean on rest_vs_activity reaches 66.4% / AUC 0.734 — meaningfully above random (+4.6 pp). The predictor learns slowly but consistently. Treat it as a co-equal feature source with the encoder, not as a training-time-only artifact.
+- encoder_mean remains the most reliable single source across all (task × scale) configurations measured so far.
+
+**Implications:**
+1. Going from 1000 to 5000 steps gave +2-3 pp on the best source. Diminishing returns are visible — more steps on this dataset will keep helping but at a slowing pace.
+2. The real next bottleneck is data scale: 20 subjects of MI runs is ~9000 epochs of EEG. Full EEGMMIDB (109 subjects × 14 runs) is ~10× more.
+3. AutoDL setup is now the highest-leverage next move. Estimated time: 4-8 hours on a single 4090.
+
 ---
 
 *Future entries below.*
