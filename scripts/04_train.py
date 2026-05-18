@@ -41,8 +41,12 @@ def parse_args() -> argparse.Namespace:
                    help="Output directory for logs + checkpoints")
     p.add_argument("--bf16", action="store_true", help="Enable bf16 autocast")
     p.add_argument("--no-plot", action="store_true", help="Skip the final plot")
+    p.add_argument("--device", default=None,
+                   help="Override device (cuda / mps / cpu). Default reads config (auto).")
+    p.add_argument("--num-workers", type=int, default=None,
+                   help="DataLoader num_workers. Default 0 on M1, 4 on CUDA (auto).")
     p.add_argument("--sigreg-weight", type=float, default=None,
-                   help="Override SIGReg λ (default 0.1 per paper; try 1.0 if collapsing)")
+                   help="Override SIGReg λ (default 1.0 per Session 3 calibration)")
     p.add_argument("--sigreg-slices", type=int, default=None,
                    help="Override SIGReg num_slices (default 256; paper default 1024)")
     p.add_argument("--predictor-depth", type=int, default=None,
@@ -54,7 +58,7 @@ def main() -> None:
     args = parse_args()
     cfg = yaml.safe_load(args.config.read_text())
     set_global_seed(cfg["training"]["seed"], deterministic=False)
-    device = get_device(cfg["training"]["device"])
+    device = get_device(args.device if args.device else cfg["training"]["device"])
 
     subjects = args.subjects if args.subjects is not None else cfg["dataset"]["subjects"]
     runs = args.runs if args.runs is not None else cfg["dataset"]["runs"]
@@ -81,11 +85,18 @@ def main() -> None:
     # 2. DataLoader
     from torch.utils.data import DataLoader
     batch_size = args.batch_size or cfg.get("training", {}).get("batch_size", 8)
+    # Default num_workers: 4 for CUDA (multi-GPU dataloading worth the fork cost),
+    # 0 elsewhere (M1 MPS / CPU — fork overhead exceeds parallel speedup at our scale).
+    default_workers = 4 if device == "cuda" else 0
+    num_workers = args.num_workers if args.num_workers is not None else default_workers
     loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=True,
-        num_workers=0,  # M1: keep 0 to avoid fork overhead; on AutoDL bump to 4
+        num_workers=num_workers,
+        pin_memory=(device == "cuda"),
         drop_last=True,
     )
+    console.print(f"  DataLoader: batch={batch_size}, num_workers={num_workers}, "
+                  f"pin_memory={device == 'cuda'}")
 
     # 3. Model
     model_cfg = EEGLeJEPAConfig()
