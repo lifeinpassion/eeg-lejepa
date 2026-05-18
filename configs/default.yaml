@@ -1,0 +1,35 @@
+# Default configuration for eeg-slm
+# Override per-experiment in configs/experiments/<name>.yaml
+
+paths:
+  data_root: data/raw
+  cache_root: data/cache
+  processed_root: data/processed
+  checkpoints: checkpoints
+  runs: runs
+
+dataset:
+  name: eegmmidb         # PhysioNet EEG Motor Movement/Imagery Database
+  subjects: [1, 2, 3]    # start small; expand after first-look validates
+  runs: [3, 4, 7, 8, 11, 12]  # standard motor-imagery runs in EEGMMIDB
+  sampling_rate_hz: 160  # native EEGMMIDB rate
+  channels: null         # null = use all 64 channels; or pass a list
+
+preprocessing:
+  bandpass_low_hz: 1.0
+  bandpass_high_hz: 70.0  # safely below Nyquist for 160 Hz EEGMMIDB native rate;
+                          # also matches LaBraM/EEGPT practice (gamma above ~70 Hz
+                          # is mostly EMG-contaminated for surface EEG)
+  notch_hz: 60.0          # US power-line; switch to 50.0 for EU/CN sources
+  reference: average     # one of: average, [list of channel names], null
+  resample_hz: 200       # null to keep native rate
+  epoch_length_s: 4.0
+  epoch_overlap_s: 0.0   # set > 0 for sliding-window pretraining
+
+training:
+  seed: 42
+  device: auto           # auto picks cuda > mps > cpu
+
+reproducibility:
+  deterministic: true
+  set_global_seed: true

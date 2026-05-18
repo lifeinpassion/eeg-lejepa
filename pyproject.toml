@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eeg-slm"
+version = "0.0.1"
+description = "Small, edge-deployable, self-adapting EEG foundation models."
+authors = [{ name = "Bill" }]
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "TBD" }
+dependencies = [
+    # Core scientific
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.1",
+    "matplotlib>=3.8",
+
+    # EEG / signal processing
+    "mne>=1.7",
+    "pyedflib>=0.1.36",
+
+    # Deep learning (cpu / mps default; cuda installed separately on AutoDL)
+    "torch>=2.3",
+    "einops>=0.7",
+
+    # Configuration & tracking
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "ipykernel>=6.29",
+    "jupytext>=1.16",
+]
+training = [
+    "accelerate>=0.30",
+    "wandb>=0.17",
+    "safetensors>=0.4",
+]
+deploy = [
+    "onnx>=1.16",
+    "onnxruntime>=1.18",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
