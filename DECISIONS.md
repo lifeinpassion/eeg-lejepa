@@ -184,6 +184,85 @@ Chance ≈ 51%. Pretrained predictor_mean is the first source we've measured tha
 3. Add a "supervised baseline" — train EEGLeJEPA from scratch with a classification head, compare to the SSL+probe pipeline.
 4. Add an easier task as a sanity-check probe: rest (T0) vs activity (T1+T2). If we can't beat random on that, something deeper is wrong.
 
+## 2026-05-18 — Session 5: rest_vs_activity probe task + 20-subject scale-up
+
+**Decision:** Add `rest_vs_activity` as a second probe task alongside `left_right`.
+**Why:** Three reasons:
+1. Easier task — much stronger EEG signature (rest = alpha-dominant relaxed state; activity = mu/beta desynchronization). If a model can't distinguish rest from movement, something is structurally broken.
+2. Acts as a sanity check independent of the noisier left-vs-right outcome.
+3. Closer in spirit to common BCI applications (e.g., "is the user actively engaged?").
+
+**Decision:** For `rest_vs_activity`, subsample T0 (rest) events per-subject to match T1+T2 count.
+**Why:** Each EEGMMIDB run has ~2× as many T0 events as T1+T2 combined. Without subsampling, the probe would learn to predict the majority class. Per-subject balanced subsampling preserves cross-subject structure and gives a clean 50/50 split.
+
+**Decision:** Add `scripts/01b_download_range.py` to bulk-download a contiguous subject range.
+**Why:** The previous downloader took subject + run lists individually; scaling to 20 subjects needed a clean way to express "subjects 4 through 20, MI runs only" without typing the range manually.
+
+## 2026-05-18 — Session 5 result: 20-subject probe overturns Session 4 headline
+
+**Correction:** The Session 4 finding of "+11.1 pp on predictor_mean" was a 3-subject sample-size artifact. At 20-subject LOSO it reverses (−7.0 pp). I (Claude) misinterpreted noise as a signal. Recording the correction publicly because it matters for downstream decisions.
+
+**Actual 20-subject results, λ=1.0 / 200-step checkpoint trained on subjects 1-3:**
+
+| Task | Source | Pretrained | Random | Δ |
+|------|--------|-----------|--------|---|
+| left_right       | encoder_mean   | 0.556 ±0.056 | 0.511 ±0.087 | **+4.4** |
+| left_right       | predictor_mean | 0.527 ±0.059 | 0.597 ±0.084 | −7.0 |
+| left_right       | both_mean      | 0.554 ±0.053 | 0.603 ±0.084 | −4.9 |
+| rest_vs_activity | encoder_mean   | 0.636 ±0.097 | 0.568 ±0.092 | **+6.8** |
+| rest_vs_activity | predictor_mean | 0.603 ±0.069 | 0.618 ±0.108 | −1.6 |
+| rest_vs_activity | both_mean      | 0.641 ±0.093 | 0.638 ±0.108 | +0.2 |
+
+Chance: left_right 0.506, rest_vs_activity 0.500.
+
+**Corrected interpretation:**
+
+1. **`encoder_mean` is the right downstream feature source.** Consistent +4-7 pp pretrained advantage over random across both tasks. Per-fold std ~5-10% on 20 folds is reasonable for cross-subject EEG.
+2. **The predictor's hidden states are NOT useful for downstream classification.** This matches LeWM's original treatment of the predictor as a training-time helper, not a deployment artifact. I shouldn't have claimed otherwise in Session 4.
+3. **Pretraining works, modestly.** A ~5-7 pp lift over random init is real but not dramatic. To approach published EEG-FM linear-probe numbers (70-80%), we likely need: more pretraining data, more pretraining steps, larger encoder.
+4. **Per-subject variance is high** but consistent: e.g., on rest_vs_activity, 7/20 subjects above 65%, 5/20 below 55%. This is normal for cross-subject EEG and not driven by 1-2 outliers.
+
+**Implication for Phase 1 path forward:**
+
+- Default downstream feature source = `encoder_mean`. Update probe defaults.
+- Drop "predictor as deployable encoder" from the product narrative.
+- Pretraining on 20 subjects (next step) and then on AutoDL with the full corpus should widen the gap further. If it doesn't, we should investigate the SIGReg λ sweep.
+
+**Lesson for me:** at 3-subject LOSO, ANY result with |Δ| < ~10-15 pp is likely noise. We should always default to ≥10 subjects for any downstream claim, and ideally ≥20.
+
+## 2026-05-18 — Session 5 result: 20-subject pretraining holds & extends
+
+**Setup:** Pretrained EEGLeJEPA (2.86M params, λ=1.0, num_slices=256, predictor.depth=4) on subjects 1-20 × MI runs (4, 8, 12) for 1000 steps on M1 in ~7 minutes wall-clock.
+
+**Training trajectory was clean:** pred_loss 1.78→0.15, sigreg ~0.32 throughout, off-diag rose modestly from 0.14→0.20, grad norm decayed 2.2→0.7. No instability.
+
+**20-subject LOSO probes:**
+
+| Task | Source | Pre (20-subj ckpt) | Pre (3-subj ckpt) | Random | Δ vs random |
+|------|--------|---|---|---|---|
+| left_right       | encoder_mean   | 0.562 ±0.104 | 0.556 | 0.511 | **+5.1** |
+| left_right       | both_mean      | 0.597 ±0.085 | 0.554 | 0.603 | −0.7 |
+| rest_vs_activity | encoder_mean   | 0.642 ±0.088 | 0.636 | 0.568 | **+7.4** |
+| rest_vs_activity | both_mean      | **0.665 ±0.105** | 0.641 | 0.638 | +2.7 (AUC 0.718) |
+| rest_vs_activity | predictor_mean | 0.647 ±0.094 | 0.603 | 0.618 | +2.8 |
+
+**Five clean findings:**
+1. `encoder_mean` is the most reliable feature source across tasks (consistent +5-7 pp over random).
+2. `encoder_mean` gap saturated quickly: 3-subj → 20-subj pretraining only added +0.6 pp on either task.
+3. The predictor's hidden states *do* improve with more pretraining (predictor_mean +3-4 pp from 3-subj to 20-subj). My earlier-today claim that "the predictor is useless downstream" was too strong — corrected here.
+4. `both_mean` on rest_vs_activity is the strongest single number we have: **66.5% accuracy, 0.718 AUC**, beating random by +2.7 pp.
+5. Per-fold variance is high but consistent across the cohort, not driven by 1-2 outliers.
+
+**Defensible headline:**
+> A 2.86M-param JEPA-style EEG encoder + SIGReg pretrained on 20 EEGMMIDB subjects (1000 steps, M1 single-GPU, ~7 min wall-clock) reaches 66.5% accuracy / 0.718 AUC on cross-subject rest-vs-activity classification via linear probe — +2.7 pp / +0.026 AUC over a randomly-initialized baseline of identical architecture.
+
+**What's NOT here yet (Session 6+ priorities):**
+1. Comparison to published EEG-FM numbers at scale (LaBraM 5M, EEGPT 10M score ~75% on similar tasks with 2,500h pretraining).
+2. AutoDL scale-up — full corpus, 5000+ steps, batch_size=64.
+3. λ ablation to confirm the SIGReg theory.
+4. A second benchmark dataset (BCI-IV-2a or TUH-EEG abnormal-detection).
+5. Supervised-baseline comparison (train EEGLeJEPA + classification head from scratch).
+
 ---
 
 *Future entries below.*

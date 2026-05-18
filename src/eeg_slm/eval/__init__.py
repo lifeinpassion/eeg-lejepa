@@ -18,6 +18,8 @@ from eeg_slm.eval.linear_probe import (
 )
 from eeg_slm.eval.motor_imagery import (
     EEGMMIDB_MI_LABELS,
+    EEGMMIDB_REST_VS_ACTIVITY_LABELS,
+    Task,
     build_motor_imagery_dataset,
 )
 
@@ -29,5 +31,7 @@ __all__ = [
     "linear_probe_loso",
     "linear_probe_loso_from_features",
     "EEGMMIDB_MI_LABELS",
+    "EEGMMIDB_REST_VS_ACTIVITY_LABELS",
+    "Task",
     "build_motor_imagery_dataset",
 ]

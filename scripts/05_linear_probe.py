@@ -55,6 +55,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--runs", type=int, nargs="*",
                    default=list(RUNS_MOTOR_IMAGERY_LEFT_RIGHT),
                    help="Run codes (default: 4 8 12 — left/right fist imagery)")
+    p.add_argument("--task", choices=["left_right", "rest_vs_activity"],
+                   default="left_right",
+                   help="Probe task. left_right (binary MI) or rest_vs_activity (easier sanity task).")
     p.add_argument("--sources", nargs="+", default=list(DEFAULT_SOURCES),
                    choices=["encoder_mean", "predictor_mean", "both_mean",
                             "predictor_last", "predictor_concat"])
@@ -80,13 +83,14 @@ def main() -> None:
         epoch_length_s=cfg["preprocessing"]["epoch_length_s"],
         epoch_overlap_s=cfg["preprocessing"]["epoch_overlap_s"],
     )
-    console.print(f"[bold]Loading motor-imagery dataset[/bold] "
+    console.print(f"[bold]Loading dataset[/bold] task={args.task} "
                   f"(subjects={args.subjects}, runs={args.runs})")
     ds = build_motor_imagery_dataset(
         subjects=args.subjects,
         data_root=cfg["paths"]["data_root"],
         preprocessing=pp,
         runs=tuple(args.runs),
+        task=args.task,
     )
     console.print(f"  {ds.summary()}")
 
@@ -117,7 +121,8 @@ def main() -> None:
             results[(init_name, source)] = res
 
     # 4. Comparison table
-    table = Table(title=f"Linear-probe LOSO accuracy on {len(args.subjects)} subjects",
+    table = Table(title=f"Linear-probe LOSO accuracy — task={args.task}, "
+                        f"{len(args.subjects)} subjects",
                   show_header=True, header_style="bold")
     table.add_column("Feature source")
     table.add_column("Pretrained acc", justify="right")

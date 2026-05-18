@@ -35,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lr", type=float, default=None)
     p.add_argument("--subjects", type=int, nargs="*", default=None,
                    help="Override config subject list")
+    p.add_argument("--runs", type=int, nargs="*", default=None,
+                   help="Override config run list (e.g. --runs 4 8 12 to use MI-only data)")
     p.add_argument("--out", type=Path, default=Path("runs/eeg-lejepa-dev"),
                    help="Output directory for logs + checkpoints")
     p.add_argument("--bf16", action="store_true", help="Enable bf16 autocast")
@@ -55,7 +57,7 @@ def main() -> None:
     device = get_device(cfg["training"]["device"])
 
     subjects = args.subjects if args.subjects is not None else cfg["dataset"]["subjects"]
-    runs = cfg["dataset"]["runs"]
+    runs = args.runs if args.runs is not None else cfg["dataset"]["runs"]
 
     # 1. Data
     pp = PreprocessingConfig(

@@ -44,6 +44,12 @@ train:
 probe:
 	$(PY) scripts/05_linear_probe.py --ckpt runs/lambda-1.0/model_final.pt --subjects 1 2 3
 
+probe-rest:
+	$(PY) scripts/05_linear_probe.py --ckpt runs/lambda-1.0/model_final.pt --subjects 1 2 3 --task rest_vs_activity
+
+download-20:
+	$(PY) scripts/01b_download_range.py --start 4 --end 20
+
 lint:
 	ruff check src tests scripts
 
