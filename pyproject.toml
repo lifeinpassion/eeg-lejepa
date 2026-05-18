@@ -38,6 +38,7 @@ dev = [
     "ruff>=0.4",
     "ipykernel>=6.29",
     "jupytext>=1.16",
+    "scikit-learn>=1.4",
 ]
 training = [
     "accelerate>=0.30",

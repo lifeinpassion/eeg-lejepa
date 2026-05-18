@@ -3,7 +3,7 @@
 PY := python
 PIP := pip
 
-.PHONY: help setup setup-dev clean download explore forward profile train lint test info
+.PHONY: help setup setup-dev clean download explore forward profile train probe lint test info
 
 help:
 	@echo "Available targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  forward     - Run EEGLeJEPA forward + backward on real EEG (Session 2)"
 	@echo "  profile     - Profile forward/backward timing on the active device"
 	@echo "  train       - Pretrain EEGLeJEPA on EEGMMIDB (Session 3, default 300 steps)"
+	@echo "  probe       - Run linear probe on a pretrained checkpoint vs random init"
 	@echo "  lint        - Run ruff"
 	@echo "  test        - Run pytest"
 	@echo "  info        - Show environment info"
@@ -39,6 +40,9 @@ profile:
 
 train:
 	$(PY) scripts/04_train.py
+
+probe:
+	$(PY) scripts/05_linear_probe.py --ckpt runs/lambda-1.0/model_final.pt --subjects 1 2 3
 
 lint:
 	ruff check src tests scripts

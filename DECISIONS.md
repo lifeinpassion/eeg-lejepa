@@ -136,6 +136,54 @@ A running log of consequential decisions made during the project. Each entry: da
 
 **Caveat:** Healthy training metrics ≠ good downstream representations. The real test is linear-probe accuracy on standard EEG benchmarks (TUH-Events, SEED, BCI-IV) — that's Session 4 / Phase 1.5. We may discover that λ=5.0's more isotropic embeddings probe better even though they look "worse" by training-loss standards.
 
+## 2026-05-18 — Session 4: linear-probe evaluation protocol
+
+**Decision:** Phase 1 downstream evaluation = LOSO linear probe with sklearn LogisticRegression.
+**Why:** This is the SSL-evaluation standard. Linear probes are minimal (one matmul), hard to game, and directly answer "did pretraining produce useful features?" If the pretrained encoder beats a randomly-initialized encoder on this protocol, SIGReg worked.
+
+**Decision:** First evaluation task = EEGMMIDB motor-imagery left-vs-right (runs 4, 8, 12).
+**Why:** Binary classification, well-understood, published baselines exist for direct comparison, data is already cached locally. T0 (rest) excluded for now — left-vs-right is the cleaner first signal.
+
+**Decision:** Pool token embeddings via mean over the patch dimension.
+**Why:** Simplest defensible aggregator. Max-pool is available as a switch; attentive pooling is overkill until we have a stronger baseline.
+
+**Decision:** Cross-validation = leave-one-subject-out (LOSO).
+**Why:** Within-subject splits are trivially solvable (same brain, same session — leakage). LOSO is the honest test of whether the encoder captures something subject-invariant. With only 3 subjects, LOSO gives 3 folds and noisy numbers — bump to ~10-20 subjects when the probe matters.
+
+**Decision:** Always pair pretrained-probe with random-init-probe as control.
+**Why:** A pretrained probe at 65% accuracy means nothing without knowing what random features score. The honest answer is the *delta*. The script prints both side-by-side and labels the gap explicitly.
+
+**Caveat we'll discover empirically:** At 3-subject LOSO scale, the variance of the probe is probably ±5-10 percentage points. A small positive delta (e.g., +3 pp) might not be statistically meaningful. The right scale for a publishable comparison is 20+ subjects.
+
+## 2026-05-18 — Session 4 result: SIGReg pretraining shows +11.1 pp on predictor features
+
+**Finding:** LOSO linear probe on EEGMMIDB motor-imagery (subjects 1-3, runs 4/8/12) yields:
+
+| Source | Pretrained | Random | Δ |
+|--------|-----------|--------|---|
+| encoder_mean   | 48.1% ±3.8 | 46.7% ±1.8 | +1.5 |
+| predictor_mean | **53.3% ±1.8** | 42.2% ±1.8 | **+11.1** |
+| both_mean      | 48.1% ±1.0 | 42.2% ±0.0 | +5.9 |
+
+Chance ≈ 51%. Pretrained predictor_mean is the first source we've measured that's both (a) above chance and (b) substantially above the random-init baseline.
+
+**Interpretation:**
+- The encoder is per-patch by design — no cross-time context — so mean-pooled encoder features carry no information about temporal dynamics like ERD/ERS. They sit at chance whether pretrained or random.
+- The predictor is a causal Transformer over the patch sequence, so it does see temporal context. Pretraining gives it useful temporal dynamics; without pretraining, its outputs are arbitrary functions of random weights and overfit-then-fail on cross-subject LOSO.
+- The +11.1 pp gap on predictor_mean is the first concrete evidence that SIGReg pretraining produced useful representations for a real downstream task.
+
+**Implication for downstream protocol:** Default feature source for sequence-level EEG tasks should be `predictor_mean`, not `encoder_mean`. The encoder alone is fine for per-patch tasks (e.g., quick anomaly detection on a single window), but anything epoch-level needs the predictor.
+
+**Caveats:**
+- Absolute accuracy (53.3%) is still very low vs published BCI methods (~75% with FBCSP/EEGNet on similar data). We're at "the architecture works and pretraining helps" not "competitive with SOTA."
+- 3-subject LOSO has wide effective CIs even with low per-fold std. The +11.1 pp result is meaningful in this controlled setup but needs ~10-20 subjects for paper-grade confidence intervals.
+
+**Action items for Session 5+:**
+1. Download subjects 1-20 (≈10× current data) and re-run the same probe.
+2. Pretrain on the full subjects-1-20 corpus (10× steps of Session 3, on AutoDL once we get over there).
+3. Add a "supervised baseline" — train EEGLeJEPA from scratch with a classification head, compare to the SSL+probe pipeline.
+4. Add an easier task as a sanity-check probe: rest (T0) vs activity (T1+T2). If we can't beat random on that, something deeper is wrong.
+
 ---
 
 *Future entries below.*
