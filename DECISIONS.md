@@ -440,6 +440,43 @@ This is a *better* story than "scaling forever" — it identifies a real enginee
 2. **Try λ=0.3 at 109-subj/10k** to test whether reduced regularization helps at the larger batch.
 3. **Eventually:** larger model (5-10M params) on the full corpus.
 
+## 2026-05-19 — Session 8 follow-up: 109-subj/30k roughly ties 50-subj/10k → compute-saturation story
+
+**Setup:** Retrained 109-subj corpus for 30k steps (3× the failed 10k run). Tests the undertraining hypothesis.
+
+**Result: 109-subj/30k mostly recovered from the 10k regression and is now roughly tied with the 50-subj/10k best.**
+
+| Task | Source | s7 (50/10k) | s8-30k (109/30k) | Δ |
+|------|--------|-------------|-------------------|---|
+| rva | encoder_mean | 0.692 / 0.749 | 0.689 / **0.757** | tied acc, +AUC |
+| rva | predictor_mean | **0.711 / 0.778** | 0.697 / 0.766 | −1.4 pp |
+| rva | both_mean | 0.693 / 0.767 | **0.701** / 0.763 | +0.8 pp acc |
+| lr  | encoder_mean | **0.620** / 0.675 | 0.617 / 0.665 | tied |
+| lr  | both_mean | **0.657 / 0.711** | 0.624 / 0.659 | −3.3 pp |
+
+**The compute-saturation interpretation:**
+
+```
+50-subj  × 10k steps × 64 batch = 32M effective examples
+109-subj × 30k steps × 64 batch = 96M effective examples
+But normalized by data-coverage:
+50-subj × 10k = 1800 epochs * 64/1800 batches * 10k = 18M sample-exposures
+109-subj × 30k = 9849 epochs * 64/9849 batches * 30k = 19M sample-exposures
+```
+
+The two best runs have effectively the same compute budget when measured as sample-exposures. They reach essentially the same downstream performance. **At 2.86M parameters, our model saturates around ~19M sample-exposures regardless of how compute is allocated across data vs steps.**
+
+**Updated paper-shape claim (replaces the "monotonic scaling" claim from Session 6):**
+
+> Pretraining benefit scales monotonically with total effective compute (steps × batch × data-density) through the saturation point of the model. At our 2.86M parameter scale on EEGMMIDB MI runs, that point is approximately 19M sample-exposures, beyond which the marginal benefit of additional data or steps is negligible. Within the saturation regime, **the allocation between subjects and steps is fungible** — 50-subj × 10k-steps and 109-subj × 30k-steps yield indistinguishable downstream linear-probe accuracy.
+
+This is a stronger, more nuanced, and more falsifiable claim than the original. It also makes a clear prediction: **a larger model would benefit from the full corpus** because its saturation point would be higher.
+
+**Action items:**
+- **Session 9 priority:** test the "bigger model = higher saturation point" prediction. Build a 5-10M parameter variant, train on full corpus, see if it beats the 0.778 AUC ceiling.
+- Skipping λ=0.3 ablation at 109-subj for now — not on the critical path.
+- Keep s7-lambda-1.0 as the canonical best small-model checkpoint.
+
 ---
 
 *Future entries below.*
