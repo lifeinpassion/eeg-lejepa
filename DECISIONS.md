@@ -353,6 +353,52 @@ Each scale-up monotonically widened the gap. 17× data × 100× compute → no v
 **Defensible headline:**
 > A 2.86M-param JEPA-style EEG encoder + SIGReg pretrained for 10,000 steps on 50 EEGMMIDB subjects (RTX 5090, ~10 min) achieves 71.1% acc / 0.778 AUC on cross-subject rest-vs-activity and 65.7% / 0.711 AUC on cross-subject left-vs-right MI via linear probe — improvements of +9.3 pp / +0.16 AUC and +5.4 pp / +0.11 AUC over a randomly-initialized identical architecture. Pretraining benefit grows monotonically across four scale points spanning 17× more data and 100× more compute, with no visible saturation. Approaches published EEG-FM numbers (LaBraM, EEGPT: 73-82% on similar tasks) at 10× smaller model and 1000× less pretraining compute.
 
+## 2026-05-19 — Session 7 result: λ ablation U-curve + 30k-step overfitting
+
+**Setup:** 7 overnight runs on AutoDL RTX 5090 (50 subjects, batch=64, bf16). Six λ ∈ {0, 0.1, 0.3, 1.0, 3.0, 10.0} at 10k steps each, plus one λ=1.0 at 30k steps. Total wall-clock: ~50 min, cost ~5 RMB.
+
+### Finding 1: λ=1.0 is the sharp optimum (clean U-curve)
+
+Best-source accuracy on rest_vs_activity (20-subject LOSO):
+
+| λ | best source | accuracy | AUC | Δ vs random |
+|---|-------------|----------|-----|-------------|
+| 0.0  | (collapsed) | **0.500** | 0.500 | −13.8 |
+| 0.1  | both_mean   | 0.650 | 0.721 | +1.2 |
+| 0.3  | both_mean   | 0.659 | 0.719 | +2.1 |
+| **1.0**  | **predictor_mean** | **0.711** | **0.778** | **+9.3** |
+| 3.0  | predictor_mean | 0.684 | 0.738 | +6.6 |
+| 10.0 | predictor_mean | 0.653 | 0.715 | +3.4 |
+
+**Same pattern on left_right** (sharper because the encoder is the dominant useful source there).
+
+**λ=0.0 produces exactly chance accuracy across all three sources and both tasks.** This is total representational collapse — the model trained without SIGReg learned the trivial "predict the same embedding for everything" solution. This is precisely the JEPA-collapse failure mode SIGReg was designed to prevent, and the empirical demonstration is now unambiguous.
+
+The Session 3 calibration (λ=1.0) turns out to be optimal under controlled comparison; we picked it on first principles and the sweep confirms it. The U is sharp enough to matter but smooth enough that the experiment isn't fragile.
+
+### Finding 2: 30k steps overfits 50-subject corpus
+
+| Source / task | 10k-step (Session 6) | 30k-step (Session 7) | Δ |
+|---------------|----------------------|----------------------|---|
+| predictor_mean / rest_vs_activity | **0.711 / 0.778** | 0.691 / 0.762 | **−2.0 pp** |
+| encoder_mean / rest_vs_activity   | 0.692 / 0.749    | 0.678 / 0.751 | −1.4 pp |
+| both_mean / left_right            | **0.657 / 0.711** | 0.623 / 0.669 | **−3.4 pp** |
+
+Pretraining loss continued to decrease through 30k steps (pred_loss → 0.09 at step 29999), but downstream probe accuracy *regressed*. Classic SSL overfitting: the predictor memorizes increasingly specific next-token patterns that don't generalize beyond the pretraining distribution.
+
+**Implication:** At 50-subject scale, ~10k steps is the right step budget. More compute should go to *more data* (full 109-subject corpus) or *bigger model*, not more steps on this corpus.
+
+### Headline numbers (unchanged from Session 6 — that run is still our best)
+
+- **rest_vs_activity:** 71.1% acc / 0.778 AUC (λ=1.0, 10k steps, predictor_mean)
+- **left_right:** 65.7% / 0.711 AUC (λ=1.0, 10k steps, both_mean)
+
+### Paper-shape claim
+
+> A 2.86M-parameter JEPA-style EEG encoder + Sketched Isotropic Gaussian Regularization (SIGReg), pretrained for 10k steps on 50 EEGMMIDB subjects, achieves 71.1% / 0.778 AUC on cross-subject rest-vs-activity and 65.7% / 0.711 AUC on cross-subject left-vs-right motor imagery via linear probe — +9.3 pp / +0.16 AUC and +5.4 pp / +0.11 AUC over a randomly-initialized identical architecture. An ablation across SIGReg weight λ ∈ {0, 0.1, 0.3, 1.0, 3.0, 10.0} reveals a clean optimum at λ=1.0 and complete representational collapse at λ=0 (the model regresses to exactly chance), empirically validating the SIGReg anti-collapse mechanism. Pretraining benefit grows monotonically across 17× more data and 100× more compute, but plateaus on a fixed corpus by ~10k steps as the predictor begins memorizing training-specific patterns.
+
+That's now a paper introduction paragraph.
+
 ---
 
 *Future entries below.*
