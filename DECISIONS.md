@@ -399,6 +399,47 @@ Pretraining loss continued to decrease through 30k steps (pred_loss → 0.09 at 
 
 That's now a paper introduction paragraph.
 
+## 2026-05-19 — Session 8 result: scaling reverses at fixed step budget
+
+**Setup:** Pretrained on full 109-subject corpus × MI runs (4, 8, 12), 9,849 epochs, 10,000 steps, batch=64, bf16, λ=1.0, RTX 5090.
+
+**Result: full-corpus checkpoint is WORSE than 50-subj checkpoint at the same step budget.**
+
+| Task | Source | s7 (50-subj/10k) | s8 (109-subj/10k) | Δ |
+|------|--------|------------------|-------------------|---|
+| rest_vs_activity | encoder_mean | **0.692** / 0.749 | 0.685 / 0.738 | −0.7 pp |
+| rest_vs_activity | predictor_mean | **0.711** / 0.778 | 0.679 / 0.756 | −3.2 pp |
+| left_right | encoder_mean | **0.620** / 0.675 | 0.566 / 0.609 | −5.4 pp |
+| left_right | both_mean | **0.657** / 0.711 | 0.589 / 0.636 | −6.8 pp |
+
+s7-lambda-1.0 remains our best checkpoint.
+
+**Likely cause: undertraining at fixed step budget.**
+
+| Run | epochs | steps | data exposures | final pred_loss |
+|-----|--------|-------|----------------|-----------------|
+| s7-lambda-1.0 | 1,803 | 10,000 | 357 | 0.046 |
+| s8-full-corpus-10k | 9,849 | 10,000 | **65** | 0.247 |
+
+The 109-subj run saw each datum ~5.5× fewer times. Final pred_loss 5× higher confirms the model hasn't converged on the new corpus. **Same step budget across a 5.5× larger corpus is not a fair comparison** — fixed compute amortized over more data means less learning per datum.
+
+**Secondary observation:** off-diag = 0.08 (s8) vs 0.19 (s7). At larger batch, SIGReg achieves *much* tighter isotropy — possibly *too* tight, sacrificing task-discriminative content. May warrant a smaller λ at batch=64 scale (e.g., 0.1-0.3 instead of 1.0). Not yet tested.
+
+**Tertiary observation:** small fraction (~1%) of EEGMMIDB subjects recorded at 128 Hz native (Nyquist=64) instead of 160 Hz. Preprocessing clamped correctly (auto-clamp from Session 5 works as designed), but heterogeneity may add weak domain-shift signal.
+
+**Implication for paper story:**
+The original "monotonic scaling across 4 data points" claim from Session 6 was *partially* an artifact of fixed-step training budget. The honest story is:
+- Pretraining benefit scales monotonically with data + compute *jointly* through 50 subjects / 10k steps.
+- At fixed step budget, the marginal benefit reverses as compute thins out over more data.
+- The compute-data Pareto frontier is the actual paper-worthy finding.
+
+This is a *better* story than "scaling forever" — it identifies a real engineering tradeoff and isn't suspiciously clean.
+
+**Action items for Session 9:**
+1. **Retrain 109-subj at 30k steps** to test the undertraining hypothesis. Expected: numbers should rise toward or past s7-lambda-1.0.
+2. **Try λ=0.3 at 109-subj/10k** to test whether reduced regularization helps at the larger batch.
+3. **Eventually:** larger model (5-10M params) on the full corpus.
+
 ---
 
 *Future entries below.*
