@@ -43,6 +43,10 @@ def parse_args() -> argparse.Namespace:
                    help="Architecture preset: base ≈ 2.86M params (default), large ≈ 7M params")
     p.add_argument("--warmup-steps", type=int, default=None,
                    help="Override LR-warmup step count (default from config; bump for larger models)")
+    p.add_argument("--channel-subset", default=None,
+                   help="Restrict EEGMMIDB pretraining to a channel subset. Either the literal "
+                        "'bci-iv-2a' (22 channels matching BCI Competition IV Dataset 2a), or a "
+                        "comma-separated list of channel names. Default uses all 64 channels.")
     p.add_argument("--bf16", action="store_true", help="Enable bf16 autocast")
     p.add_argument("--no-plot", action="store_true", help="Skip the final plot")
     p.add_argument("--device", default=None,
@@ -77,11 +81,24 @@ def main() -> None:
         epoch_length_s=cfg["preprocessing"]["epoch_length_s"],
         epoch_overlap_s=cfg["preprocessing"]["epoch_overlap_s"],
     )
+    # Resolve --channel-subset
+    channel_subset: list[str] | None = None
+    if args.channel_subset is not None:
+        if args.channel_subset.lower() in ("bci-iv-2a", "bci_iv_2a", "bci_iv2a"):
+            from eeg_slm.data.bci_iv_2a import BCI_IV_2A_EEG_CHANNELS
+            channel_subset = list(BCI_IV_2A_EEG_CHANNELS)
+        else:
+            channel_subset = [c.strip() for c in args.channel_subset.split(",") if c.strip()]
+
     console.print(f"[bold]Building pretraining tensor[/bold] from "
                   f"subjects={subjects}, runs={runs}")
+    if channel_subset is not None:
+        console.print(f"  channel-subset: {len(channel_subset)} channels — "
+                      f"{channel_subset[:5]}{' ...' if len(channel_subset) > 5 else ''}")
     X = build_eegmmidb_pretraining_tensor(
         subjects=subjects, runs=runs,
         data_root=cfg["paths"]["data_root"], preprocessing=pp,
+        channel_subset=channel_subset,
     )
     console.print(f"  → {X.shape} (epochs, channels, samples)")
     dataset = EEGTensorDataset(X)

@@ -97,6 +97,18 @@ def test_restrict_to_bci_channels_selects_subset() -> None:
     np.testing.assert_array_equal(X22, X[:, :22, :])
 
 
+def test_build_eegmmidb_pretraining_tensor_accepts_channel_subset_signature() -> None:
+    """`build_eegmmidb_pretraining_tensor` accepts `channel_subset=` keyword."""
+    from inspect import signature
+    from eeg_slm.data.dataset import build_eegmmidb_pretraining_tensor
+    sig = signature(build_eegmmidb_pretraining_tensor)
+    assert "channel_subset" in sig.parameters, (
+        "build_eegmmidb_pretraining_tensor should accept a channel_subset parameter"
+    )
+    # Default is None (no subsetting)
+    assert sig.parameters["channel_subset"].default is None
+
+
 def test_eegmmidb_intersection_full() -> None:
     """Sanity check that all 22 BCI-IV-2a EEG channels are present in
     EEGMMIDB's 10-10 layout (the assumption behind cross-dataset transfer)."""

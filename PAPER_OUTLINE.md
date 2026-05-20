@@ -157,6 +157,22 @@ EEG-LeJEPA demonstrates that compact (<3M parameter), single-GPU-trainable, prin
 3. **λ ablation table** — 6 rows (one per λ), 6 columns (3 sources × 2 tasks)
 4. **Comparison to prior art** — LaBraM, EEGPT, NeuroLM, BIOT vs us (parameter count, pretraining compute, accuracy)
 
+### 4.6 Cross-dataset transfer to BCI Competition IV Dataset 2a
+
+We evaluate cross-dataset transfer by applying our EEGMMIDB-pretrained encoder to BCI Competition IV Dataset 2a (4-class motor imagery, 22 EEG channels, 250 Hz; 9 subjects, 2,592 trials). We compare two strategies:
+
+1. **Channel-padded inference**: use the 64-channel s7-lambda-1.0 checkpoint *as-is*, padding BCI-IV-2a's 22 channels into the 64-channel layout with zeros at the missing positions.
+2. **Channel-matched pretraining**: re-pretrain on EEGMMIDB restricted to the 22-channel intersection with BCI-IV-2a, then apply directly.
+
+| Setup | encoder_mean Δ acc | predictor_mean Δ acc | best Macro-AUC |
+|-------|---------------------|-----------------------|----------------|
+| Channel-padded (s7→BCI-IV-2a) | +4.8 | **+5.6** | 0.595 |
+| Channel-matched (s11 native 22-ch) | +2.7 | +1.7 | 0.590 |
+
+**Both approaches show positive cross-dataset transfer**, demonstrating that SIGReg-pretrained representations are not specific to the source dataset. Surprisingly, the **channel-padded approach transfers more signal than channel-matched pretraining** (predictor_mean: +5.6 pp vs +1.7 pp). The likely mechanism is that the 64-channel encoder learns spatially-redundant representations that gracefully degrade under input-channel zeroing, while the 22-channel encoder is forced into a thinner representation by its reduced information bandwidth (final pretraining pred_loss 0.174 vs 0.046, a 4× gap).
+
+**Practical implication for compact EEG-FM deployment:** pretrain on the richest available channel set, use channel padding at inference, rather than restricting pretraining to match downstream channels.
+
 ## Open items (Session 8+)
 
 - [ ] Run full 109-subject pretraining → fill in row 5 of scaling table

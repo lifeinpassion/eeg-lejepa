@@ -69,16 +69,40 @@ def build_eegmmidb_pretraining_tensor(
     preprocessing: PreprocessingConfig,
     to_microvolts: bool = True,
     zscore: bool = True,
+    channel_subset: list[str] | None = None,
 ) -> np.ndarray:
     """Load + preprocess + epoch + (optionally) z-score multiple subjects.
 
-    Returns a single (N_total_epochs, C, T) float32 array, suitable for
-    wrapping in `EEGTensorDataset`.
+    Parameters
+    ----------
+    channel_subset
+        If provided, restrict each subject's raw to these channel names BEFORE
+        preprocessing. Channels are returned in the order given. Used for
+        cross-dataset transfer: e.g. pass `BCI_IV_2A_EEG_CHANNELS` to pretrain
+        on the 22-channel intersection that's directly transferable to BCI-IV-2a.
+        Channel name matching is case-insensitive and dot-stripped.
+
+    Returns a single (N_total_epochs, C, T) float32 array.
     """
     loader = EEGMMIDBLoader(data_root=Path(data_root))
     pieces: list[np.ndarray] = []
     for s in subjects:
         raw = loader.load_raw(subject=s, runs=runs)
+
+        if channel_subset is not None:
+            # Build a case-insensitive lookup from raw.ch_names to actual names
+            raw_lookup = {ch.replace(".", "").upper(): ch for ch in raw.ch_names}
+            target = [c.replace(".", "").upper() for c in channel_subset]
+            missing = [c for c in target if c not in raw_lookup]
+            if missing:
+                raise ValueError(
+                    f"Subject {s}: channels not in raw ({len(missing)}): {missing}. "
+                    f"Raw has {len(raw.ch_names)} channels."
+                )
+            ordered_names = [raw_lookup[c] for c in target]
+            # MNE's `.pick()` (introduced in 1.5) preserves the order of the given list.
+            raw.pick(picks=ordered_names, verbose="ERROR")
+
         raw_pp = preprocess_raw(raw, preprocessing)
         epochs = fixed_length_epochs(raw_pp, preprocessing)
         X = to_numpy(epochs, to_microvolts=to_microvolts)
