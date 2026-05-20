@@ -47,6 +47,9 @@ probe:
 probe-rest:
 	$(PY) scripts/05_linear_probe.py --ckpt runs/lambda-1.0/model_final.pt --subjects 1 2 3 --task rest_vs_activity
 
+probe-bci-baseline:
+	$(PY) scripts/07_probe_bci_iv_2a.py
+
 download-20:
 	$(PY) scripts/01b_download_range.py --start 4 --end 20
 
