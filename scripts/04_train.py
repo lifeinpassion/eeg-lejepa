@@ -39,6 +39,10 @@ def parse_args() -> argparse.Namespace:
                    help="Override config run list (e.g. --runs 4 8 12 to use MI-only data)")
     p.add_argument("--out", type=Path, default=Path("runs/eeg-lejepa-dev"),
                    help="Output directory for logs + checkpoints")
+    p.add_argument("--model-size", choices=["base", "large"], default="base",
+                   help="Architecture preset: base ≈ 2.86M params (default), large ≈ 7M params")
+    p.add_argument("--warmup-steps", type=int, default=None,
+                   help="Override LR-warmup step count (default from config; bump for larger models)")
     p.add_argument("--bf16", action="store_true", help="Enable bf16 autocast")
     p.add_argument("--no-plot", action="store_true", help="Skip the final plot")
     p.add_argument("--device", default=None,
@@ -99,7 +103,8 @@ def main() -> None:
                   f"pin_memory={device == 'cuda'}")
 
     # 3. Model
-    model_cfg = EEGLeJEPAConfig()
+    model_cfg = (EEGLeJEPAConfig.large() if args.model_size == "large"
+                 else EEGLeJEPAConfig.base())
     model_cfg.encoder.n_channels = dataset.n_channels
     model_cfg.encoder.patch_size = 40
     model_cfg.sigreg_num_slices = args.sigreg_slices if args.sigreg_slices is not None else 256
@@ -122,7 +127,8 @@ def main() -> None:
         batch_size=batch_size,
         learning_rate=args.lr if args.lr is not None else cfg["training"].get("learning_rate", 1e-3),
         weight_decay=cfg["training"].get("weight_decay", 0.05),
-        warmup_steps=cfg["training"].get("warmup_steps", 30),
+        warmup_steps=args.warmup_steps if args.warmup_steps is not None
+                     else cfg["training"].get("warmup_steps", 30),
         grad_clip=cfg["training"].get("grad_clip", 1.0),
         log_every=cfg["training"].get("log_every", 10),
         use_bf16=args.bf16,

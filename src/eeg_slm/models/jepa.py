@@ -38,6 +38,32 @@ class EEGLeJEPAConfig:
                                    # Revisit when scaling batch on AutoDL.
     sigreg_num_slices: int = 1024  # paper default. 256 also works but converges slightly less smoothly.
 
+    @classmethod
+    def base(cls) -> "EEGLeJEPAConfig":
+        """2.86M-parameter default (used through Session 8).
+        Encoder: embed_dim=192, mlp_depth=2. Predictor: dim=192, depth=4.
+        """
+        return cls()
+
+    @classmethod
+    def large(cls) -> "EEGLeJEPAConfig":
+        """~7M-parameter variant — tests whether the Session-8 ~19M sample-exposure
+        saturation was a model-capacity limit.
+
+        Encoder: embed_dim=256, mlp_depth=3  (~2.2M params)
+        Predictor: dim=256, depth=6, heads=4 (head_dim=64)  (~4.7M params)
+        Total: ~7M, in the LaBraM/EEGPT neighborhood.
+        """
+        cfg = cls()
+        # Encoder
+        cfg.encoder.embed_dim = 256
+        cfg.encoder.mlp_depth = 3
+        # Predictor (must match encoder.embed_dim)
+        cfg.predictor.embed_dim = 256
+        cfg.predictor.depth = 6
+        cfg.predictor.num_heads = 4  # 256 / 4 = 64 head_dim
+        return cfg
+
 
 class EEGLeJEPA(nn.Module):
     """End-to-end EEG JEPA: encoder + causal predictor + SIGReg regularizer."""

@@ -76,7 +76,7 @@ Paper uses CvM as the univariate Gaussianity test (closed form, sort-based, triv
 - **Hardware:** M1 (8 GB) for dev + final probes, RTX 5090 (32 GB) for training runs.
 - **Defaults:** λ=1.0, num_slices=1024, batch=64 (AutoDL) or 8 (M1 dev), AdamW (lr=1e-3, wd=0.05, betas=(0.9, 0.95)), cosine LR with 30-step linear warmup, gradient clipping at 1.0, bf16 autocast on GPU.
 
-### 4.2 Scaling — six points; saturation at the model-capacity ceiling
+### 4.2 Scaling — saturation is data-bound, not capacity-bound
 
 | Pretraining | sample-exposures | rest_vs_activity best AUC | best Δ | pred_loss end |
 |-------------|------------------|----------------------------|--------|---------------|
@@ -92,9 +92,9 @@ Two clean observations:
 1. **Monotonic improvement up to ~19M sample-exposures**, regardless of how that compute is allocated across the data axis vs the step axis. The 50-subj × 10k and 109-subj × 30k runs land at indistinguishable downstream AUC despite using 5.5× and 1× the corpus respectively.
 2. **Saturation at ~19M sample-exposures for our 2.86M-parameter architecture.** Beyond that, neither additional data nor additional steps materially help.
 
-This is a textbook compute-saturation scaling shape. It rules out "more data is the answer" at our model size and identifies the next-experiment frontier as **architectural scaling** — a 5-10M parameter variant should have a higher saturation point and benefit from the full corpus.
+This is a textbook compute-saturation scaling shape. We then test whether the saturation reflects model-capacity vs data-scale by training a 2.4× larger model (7M params) on the full corpus at matched compute. **Result: the larger model is consistently worse** — −2 to −10 pp accuracy regression across both tasks and all three feature sources, with the harder task (left vs right MI) hit dramatically (predictor_mean falls *below chance*). At our recipe and data scale, more capacity hurts rather than helps. The saturation at ~19M sample-exposures is therefore **data-bound, not capacity-bound** — at 109-subject EEGMMIDB scale, the compact 2.86M-parameter model is the *empirically optimal* size. Realizing benefit from larger models would require substantially more data (TUH-EEG-class, thousands of subjects), matching the practice of published EEG foundation models (LaBraM, EEGPT both pretrained on ~2,500+ hours).
 
-[Reference Figure: scaling curve with X = log10(sample-exposures), Y = best probe AUC. Six points showing the monotonic rise + clean saturation plateau at ~19M.]
+[Reference Figure: scaling curve with X = log10(sample-exposures), Y = best probe AUC. Six base-model points showing the monotonic rise + clean saturation plateau at ~19M, plus one large-model point well below the plateau.]
 
 ### 4.3 λ ablation — clean U-curve
 

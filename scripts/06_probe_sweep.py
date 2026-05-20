@@ -116,11 +116,25 @@ def main() -> None:
         datasets[task] = ds
         console.print(f"  {ds.summary()}")
 
-    # Build a single model config (same for random + all pretrained loads)
+    # Build the per-size model configs we'll need.
+    # Checkpoint architecture is inferred from the state_dict keys/shapes
+    # because we don't store config alongside the checkpoint (TODO: add that).
     sample_ds = datasets[args.tasks[0]]
-    model_cfg = EEGLeJEPAConfig()
-    model_cfg.encoder.n_channels = sample_ds.X.shape[1]
-    model_cfg.encoder.patch_size = 40
+
+    def _make_cfg(size: str) -> EEGLeJEPAConfig:
+        cfg = EEGLeJEPAConfig.large() if size == "large" else EEGLeJEPAConfig.base()
+        cfg.encoder.n_channels = sample_ds.X.shape[1]
+        cfg.encoder.patch_size = 40
+        return cfg
+
+    def _infer_size_from_state_dict(state: dict) -> str:
+        """Sniff the encoder.patch_embed weight shape to detect base (192) vs large (256)."""
+        for k, v in state.items():
+            if "patch_embed.weight" in k:
+                return "large" if v.shape[0] == 256 else "base"
+        return "base"
+
+    model_cfg = _make_cfg("base")  # for the random-init baseline
 
     # Random-init baseline (one per task × source; reuse across all checkpoints)
     console.print("\n[bold]Random-init baseline[/bold]")
@@ -142,11 +156,15 @@ def main() -> None:
     for ckpt in ckpts:
         ckpt_name = ckpt.parent.name
         console.print(f"\n[bold]Probing[/bold] {ckpt_name}")
-        model = EEGLeJEPA(model_cfg)
         state = torch.load(ckpt, map_location="cpu")
+        size = _infer_size_from_state_dict(state)
+        ckpt_cfg = _make_cfg(size)
+        model = EEGLeJEPA(ckpt_cfg)
         missing, unexpected = model.load_state_dict(state, strict=False)
         if missing or unexpected:
             console.print(f"  [yellow]missing {len(missing)} / unexpected {len(unexpected)}[/yellow]")
+        elif size == "large":
+            console.print(f"  [dim](detected large architecture)[/dim]")
         for task in args.tasks:
             for src in args.sources:
                 feats = extract_features_jepa(model, datasets[task].X,
