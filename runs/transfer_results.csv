@@ -1,0 +1,7 @@
+protocol,source,rand_acc,pre_acc,delta_pp,rand_auc,pre_auc
+padded,encoder_mean,0.265,0.314,4.9,0.535,0.583
+padded,predictor_mean,0.279,0.321,4.2,0.539,0.585
+padded,both_mean,0.296,0.316,2.0,0.551,0.579
+matched,encoder_mean,0.273,0.289,1.5,0.533,0.551
+matched,predictor_mean,0.296,0.300,0.4,0.552,0.562
+matched,both_mean,0.311,0.296,-1.5,0.558,0.555

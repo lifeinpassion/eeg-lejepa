@@ -1,0 +1,8 @@
+label,ckpt,n_subjects,n_steps,exposures,best_auc,best_acc,best_source,is_large
+3 subj / 200 steps,clean-s3-200,3,200,12800,0.7096543209876542,0.6494444444444445,predictor_mean,False
+20 subj / 1k steps,clean-s20-1k,20,1000,64000,0.7240740740740741,0.6599999999999999,predictor_mean,False
+20 subj / 5k steps,clean-s20-5k,20,5000,320000,0.762074074074074,0.6922222222222222,both_mean,False
+50 subj / 10k steps,clean-s51-100-10k,50,10000,640000,0.7565925925925925,0.6794444444444443,both_mean,False
+89 subj / 10k steps,clean-s89-10k,89,10000,640000,0.7679012345679012,0.686111111111111,predictor_mean,False
+89 subj / 30k steps,clean-s89-30k,89,30000,1920000,0.7500740740740742,0.6722222222222222,both_mean,False
+7M params / 89 subj / 30k,clean-large-89-30k,89,30000,1920000,0.773925925925926,0.6955555555555555,both_mean,True
