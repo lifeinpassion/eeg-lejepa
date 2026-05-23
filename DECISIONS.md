@@ -592,6 +592,191 @@ This is a useful, actionable, and somewhat counterintuitive finding. Worth a par
 - The s11 result is preserved as the "ablation that established the surprising finding."
 - For Session 12+: writeup, or try TUH-EEG pretraining when access comes through.
 
+## 2026-05-19 — Session 12.2 result: SSL+probe beats supervised-from-scratch
+
+**Setup:** Built `EEGClassifier` (encoder + linear head, ~1.08M params — even smaller than SSL because no predictor) and a `supervised_loso` training utility. Trained from scratch on each LOSO fold (subjects 1-20, EEGMMIDB motor imagery), 500 steps × batch 16 × lr=5e-4 with 50-step linear warmup. Compared head-to-head against our SSL + linear probe pipeline.
+
+**Result: SSL pipeline matches or exceeds supervised training on both tasks, with lower variance.**
+
+| Task | Supervised | SSL + probe | Δ (SSL − Sup) |
+|------|------------|-------------|----------------|
+| left_right       | 0.623 ± 0.075 / AUC 0.707 | 0.657 ± **0.046** / AUC 0.711 | **+3.4 pp** / +0.004 |
+| rest_vs_activity | 0.601 ± 0.070 / AUC 0.663 | 0.711 ± 0.089 / AUC **0.778** | **+11.0 pp** / **+0.115** |
+
+**Three findings:**
+
+1. **SSL+probe beats supervised on left_right** (the harder task) despite supervised having direct gradient access to labels. This is surprising and clean. SSL+probe also has **38% lower per-fold std** (0.046 vs 0.075) — the pretrained encoder generalizes more consistently across subjects.
+2. **SSL+probe decisively beats supervised on rest_vs_activity** by +11.0 pp / +0.115 AUC. With our compact data scale, 500 supervised steps undertrain a randomly-initialized transformer; the pretrained encoder is already well-positioned.
+3. **Supervised has below-chance folds** (s011 on left_right, s001 on rest_vs_activity). SSL+probe has zero below-chance subjects on either task — pretraining acts as an effective per-subject regularizer.
+
+**Compute economy:**
+- Supervised: 20 LOSO folds × 500 steps × 2 tasks = ~30 min compute on M1, must re-train per task
+- SSL + probe: 10k-step SSL pretrain (10 min on 5090) + sklearn LogReg per task (<1 sec). Encoder reusable across tasks.
+
+**Paper-shape claim:**
+
+> Our SIGReg-pretrained EEG-LeJEPA with frozen-encoder linear probe matches or exceeds supervised-from-scratch training of the same encoder architecture on cross-subject EEGMMIDB motor imagery (+3.4 pp on left-vs-right MI, +11.0 pp on rest-vs-activity), with 38% lower per-fold standard deviation on the harder task and zero below-chance subjects on either task. The pretrained encoder is reusable across downstream tasks at sub-second probe cost; supervised training requires per-task retraining. This validates SSL pretraining as the preferred approach for compact, edge-deployable EEG models at data scales realistic for individual research labs.
+
+This becomes a major paper claim; the supervised baseline is now a strength rather than a missing piece.
+
+## 2026-05-19 — Session 12.3 discovery: prior work (Laya, arXiv:2603.16281)
+
+While building the published-baseline comparison table, I discovered a paper I should have caught in the Session 1 literature review:
+
+**"Laya: A LeJEPA Approach to EEG via Latent Prediction over Reconstruction"**  
+arXiv:2603.16281, March 17, 2026.
+
+Laya applies LeJEPA + SIGReg to EEG representation learning. It is, on its face, the same core method we use.
+
+**Overlap (from initial search; needs careful reading):**
+- LeJEPA with SIGReg as the regularizer.
+- EEG application.
+- Motor imagery evaluation.
+- "Compact pretraining" framing (Laya-S on 10% of data).
+
+**Difference (substantive, not just framing):**
+- **Their claim:** SSL approaches *remain below* supervised performance on BCI motor imagery.
+- **Our finding (Session 12.2):** SSL + linear probe matches or *exceeds* supervised-from-scratch training of the same architecture on EEGMMIDB motor imagery (+3.4 pp left_right, +11.0 pp rest_vs_activity).
+
+This is a *substantive disagreement*, not redundancy. It deserves careful investigation.
+
+**Other things we likely have that Laya may not (TBC after reading):**
+1. Full scaling-law characterization across 6 (data, compute) points.
+2. Compute-saturation framing (~19M sample-exposures at 2.86M params).
+3. Capacity test with 7M-param variant (and the counterintuitive negative result).
+4. Counterintuitive channel-padding > channel-matching cross-dataset transfer finding.
+5. λ ablation with U-curve + λ=0 collapse-to-chance demonstration.
+6. Explicit cross-dataset transfer evaluation (EEGMMIDB → BCI-IV-2a, two protocols).
+7. Edge-deployment framing with concrete latency / parameter / cost numbers.
+
+**Implication for the paper:**
+- The "first application of SIGReg to EEG" novelty claim is no longer ours.
+- The paper can still be published — Laya is concurrent and our substantive findings differ.
+- Path forward: read Laya carefully → reposition as "complementary investigation with contradictory finding on supervised comparison" → cite as concurrent work.
+
+**Action items:**
+1. **Fetch and read Laya paper in full** to map overlap precisely.
+2. Identify what justifies our different supervised-comparison finding (data scale? architecture? training recipe? probe protocol?).
+3. Reframe PAPER_OUTLINE to position the work appropriately.
+4. Possibly retitle.
+
+## 2026-05-19 — Laya overlap-and-differentiation map (post-careful-read)
+
+**Bottom line: we are clearly differentiated. Laya is a foundation-scale paper with broad clinical-task coverage; ours is the compact-scale / scaling-characterization / edge-deployment paper. Both can coexist.**
+
+**Laya's actual reported motor-imagery numbers (Table 1, balanced accuracy):**
+
+| Task | LaBraM | LUNA | Laya-S | Laya-full |
+|------|--------|------|--------|-----------|
+| 5-Finger MI    | 0.213 | 0.196 | 0.205 | 0.213 |
+| LH vs RH MI    | 0.518 | 0.512 | **0.506** | **0.506** |
+| 4-Class MI     | 0.297 | 0.259 | 0.266 | 0.278 |
+| RH vs Feet MI  | 0.573 | 0.570 | 0.585 | 0.577 |
+
+Their LH-vs-RH at **0.506** is essentially chance — they explicitly note BCI motor imagery as a weak point of their method in §5. Our EEGMMIDB results are far above this.
+
+**Where Laya wins (will acknowledge in related work):** clinical-task EEG (TUH abnormal 0.755-0.779, seizure 0.783, etc.). Their value is on clinical tasks, not BCI MI.
+
+**Our defensible differentiators, in priority order:**
+
+1. **Scaling-law characterization (lead claim).** Laya §5 quote: "we hypothesize that training time may not scale linearly with dataset size." They have 2 data points (Laya-S vs Laya-full); we have 6 and explicit compute-saturation.
+2. **Channel-matching vs channel-padding ablation** for cross-dataset transfer. They use a Dynamic Channel Mixer; we did a controlled within-method comparison.
+3. **λ ablation with U-curve + λ=0 collapse demonstration as a figure.** They state the collapse threshold; we show the curve.
+4. **Edge-deployment compute story.** Laya: 2× L40S, 100k steps, 30k hours. Us: 1× RTX 5090, 10k steps, 10 min, ~$0.50, 2.86M params.
+5. **SSL > supervised on coarser cognitive-state tasks** (carefully scoped — Laya claims SSL < supervised on fine-grained MI specifically).
+6. **Higher accuracy on MI tasks at 1000× less compute** — striking differentiator for the abstract.
+
+**Critical thing to verify before submission:**
+- Laya's "LH vs RH MI" task identity (which corpus). If EEGMMIDB → direct head-to-head where we're 0.711 vs their 0.506. If MOABB-derived → comparable-task-type caveat. Appendix D.1.1 has this but wasn't in the fetched HTML.
+- Their exact parameter count, optimizer, LR, λ value — all in their Appendix B which wasn't captured. Pull PDF directly when finalizing the paper.
+
+**Repositioning for the paper:**
+- Drop "first SIGReg-EEG application" claim.
+- Add: "Concurrent work by Panchavati et al. (arXiv:2603.16281, Mar 2026) [Laya] applies LeJEPA to EEG at foundation-model scale. Our work is complementary, focused on the compact-scale and edge-deployment regime with explicit scaling-law characterization."
+- Title shift candidates:
+  - "Edge-Deployable EEG Foundation Models: Scaling Laws and Channel-Transfer Behavior for Compact SIGReg-Pretrained Encoders" (more accurate)
+  - "When Does SIGReg-Pretrained EEG Beat Supervised? A Compact-Scale Study with Scaling Laws and Cross-Dataset Transfer"
+
+The contribution remains real and publishable. We just need to be honest about Laya as concurrent work.
+
+## 2026-05-20 — Laya v2 PDF read: verified facts and corrected positioning
+
+**Bill provided the full PDF (2603.16281v2.pdf). Verified facts from appendices:**
+
+**Architecture & training (Appendix A, Algorithm 1):**
+- Two variants: Laya-S (10K steps, 10% data = 3K hours), Laya-B (20K steps, full 30K hours).  *v1 said 100K for Laya-full; v2 says 20K for Laya-B. Different paper version.*
+- Batch size 512 (effective), 2× L40S GPUs.
+- LR 1e-4, cosine warm-up 1K steps, min LR 1e-6, weight decay 0.05, bf16.
+- Loss: `L = MSE(T̂, T[m]) + λ·SIGReg(p_cls) + γ·L_query`, with γ=1.
+- Uses StopGrad on encoder→target path (but NOT EMA, NOT separate teacher).
+- Total effective compute: 20K × 512 = **10.24M sample-views** (vs our 10K × 64 = 640K, **~16× more compute than us**, not 1000× as I claimed before).
+
+**Pretraining datasets (Appendix C):** TUH EEG, HBN EEG, NMT, MOABB datasets, EEGDash (34 OpenNeuro datasets). Total 29,109 hours, 20,940 subjects, 17 channel topologies. EEGMMIDB and BCI Competition IV are EXCLUDED from pretraining (held out for downstream).
+
+**CRITICAL — Downstream task identities (Appendix D.1.1):**
+- **"LH vs RH MI" is a MULTI-DATASET POOLED benchmark**: BCI Competition IV-2a, IV-2b, **PhysioNet Motor Imagery (EEGMMIDB)**, Weibo2014, Cho2017, Liu2022, Schirrmeister2017, Zhou2016, Kaya2018. *NOT EEGMMIDB-only.*
+- "4-Class MI" pools BCI IV-2a and Kaya2018.
+- "RH vs Feet MI" pools 9 datasets including EEGMMIDB.
+
+**This invalidates my earlier "we beat Laya 20 pp" claim.** Their 0.510 is a multi-dataset average; our 0.657 is EEGMMIDB-only in-distribution. Different research questions, not directly comparable.
+
+**Reported numbers (Table 1, multi-dataset means, balanced accuracy ± std over 5 seeds):**
+| Task | LaBraM | LUNA | CBraMod | REVE | Laya-S | Laya-B |
+|------|--------|------|---------|------|--------|--------|
+| 5-Finger MI | 0.208 | 0.202 | 0.204 | 0.234 | 0.210 | 0.205 |
+| LH vs RH MI | 0.471 | 0.493 | 0.491 | 0.513 | 0.510 | 0.507 |
+| 4-Class MI | 0.289 | 0.259 | 0.271 | 0.280 | 0.273 | 0.288 |
+| RH vs Feet MI | 0.524 | 0.501 | 0.515 | 0.508 | 0.586 | 0.578 |
+| **Mean** | 0.373 | 0.364 | 0.370 | 0.384 | **0.395** | 0.394 |
+
+**Clinical Table 2** — Laya-S wins overall (0.603 mean) with notable wins on TUH-Abnormal (0.798), Seizure (0.786), mTBI (Laya-B 0.815), Parkinson's (Laya-S 0.708). Laya wins on 6 of 10 clinical tasks.
+
+**Repositioning the paper:**
+The original "we contradict Laya" framing is wrong. Better framing:
+- Laya solves **foundation-scale cross-dataset generalization** for EEG.
+- We solve **compact-scale in-distribution probing** for EEG.
+- Both are valid research questions; ours is the regime Laya's foundation-scale recipe doesn't address.
+- Direct comparison on EEGMMIDB alone is not possible because Laya reports multi-dataset pools, not per-dataset breakdowns.
+
+**Verified differentiation (now honestly justified):**
+1. Compact regime: 16× less effective compute, single corpus, single GPU, 10 min.
+2. Scaling-law characterization (6 points; Laya has 2 and lists this as a limitation).
+3. λ sweep with full curves (Laya states the collapse threshold only).
+4. Channel-padded vs channel-matched cross-dataset transfer ablation (Laya has no equivalent).
+5. Supervised-from-scratch comparison (Laya only compares vs other SSL foundation models).
+6. Edge-deployment compute story.
+
+**The "SSL > supervised" finding** is genuinely interesting and not contradicted by Laya (they didn't run that comparison). It stands.
+
+**The cross-dataset BCI-IV-2a transfer experiment** is now an even better contribution — Laya doesn't report BCI-IV-2a single-dataset numbers; we do.
+
+**Update logged to:** `paper/sections/abstract.tex`, `paper/sections/introduction.tex`, `paper/sections/related.tex`, `paper/refs.bib`.
+
+---
+
+## 2026-05-22 — `compact` preset + `--patch-size`/`--npy` for in-domain seizure pretraining
+
+**Context.** The sibling `../eeg-seizure` project found EEGMMIDB pretraining gives *no*
+cross-patient transfer to CHB-MIT seizure detection (frozen-pretrained 0.648 ≈ frozen-random
+0.633 LOSO AUROC) — a domain + montage gap (healthy monopolar motor-imagery vs pediatric
+bipolar epilepsy). The fix is in-domain SSL, pretrained at the detector's tokenisation so the
+encoder drops in. Spec: `INDOMAIN_PRETRAIN_PLAN.md`.
+
+**Decision:** Add the hooks to pretrain a detector-matched encoder.
+- `EEGLeJEPAConfig.compact()` — embed_dim=128 (encoder + predictor; head_dim 128/4=32). Matches
+  the eeg-seizure `DetectorConfig` default so a `compact` checkpoint at `--patch-size 64` drops
+  into the detector with no overrides. (`base()`=192, `large()`=256 unchanged.)
+- `scripts/04_train.py`: `--model-size compact`; `--patch-size` (default 40 — was hardcoded;
+  use 64 for the 256 Hz seizure corpus); `--npy PATH` to load a precomputed already-preprocessed
+  `(epochs, channels, samples)` corpus (e.g. eeg-seizure's interictal `.npz`) instead of building
+  EEGMMIDB. Model block now reads `args.patch_size` and the `compact` branch.
+- Test: `tests/test_models.py::test_compact_preset_matches_seizure_detector_tokenisation`
+  (22 ch / patch 64 → embeddings (B,16,128)). All files `py_compile` clean.
+**Rationale:** smallest possible surface to enable the in-domain experiment without touching
+encoder/predictor/SIGReg/trainer; back-compat preserved (defaults unchanged).
+**Revisit if:** in-domain pretraining beats the 256/64/128 scratch baseline → `compact` becomes
+the standard seizure encoder; else drop the thread (keep the negative result).
+
 ---
 
 *Future entries below.*

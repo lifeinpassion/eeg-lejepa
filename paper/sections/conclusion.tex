@@ -1,0 +1,27 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented EEG-LeJEPA, a 2.86\,M-parameter SIGReg-pretrained EEG
+encoder runnable on a single consumer GPU in 10 minutes. The model
+achieves 68.6\,\% / 0.751 AUC on EEGMMIDB rest-vs-activity and 62.1\,\% /
+0.690 AUC on left-vs-right motor imagery (encoder mean-pool features) via
+linear probe under leave-one-subject-out evaluation with subjects~1--20
+strictly held out of pretraining; both gains over a random-initialized
+identical architecture are statistically significant ($+11.7$ and
+$+10.9$\,pp; $q<0.002$). We characterized the compact-scale regime across six (data,
+compute) operating points under a leakage-free split, observing a
+best-source AUC plateau near 0.76 that a 2.4$\times$ larger model modestly
+exceeds (so the compact model is an accuracy/size trade-off for edge
+deployment, not a capacity-optimal point), validated the SIGReg
+anti-collapse mechanism via an explicit
+$\lambda$ ablation including the $\lambda{=}0$ collapse-to-exactly-chance
+demonstration, established a counterintuitive cross-dataset transfer
+finding (channel-padded $>$ channel-matched), and showed that the SSL$+$linear
+probe ties supervised-from-scratch training of the same architecture on
+left-vs-right MI ($-0.2$\,pp, n.s.) and significantly exceeds it on
+rest-vs-activity ($+8.4$\,pp, $p<0.001$), with one frozen encoder serving
+both downstream tasks. Together these results
+argue that compact single-GPU SSL pretraining at the right scale produces
+useful, edge-deployable EEG representations, complementing the
+foundation-scale recipe of concurrent work~\cite{laya2026} along the
+in-distribution single-corpus axis.

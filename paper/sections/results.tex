@@ -1,0 +1,388 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Headline results}
+\label{sec:results:headline}
+
+Table~\ref{tab:headline} reports the linear-probe LOSO numbers for our
+default configuration (2.86\,M parameters; pretrained on subjects
+51--100, 10{,}000 steps at $\lambda{=}1.0$; evaluated on the strictly
+held-out subjects 1--20) on both EEGMMIDB binary tasks. The strongest and
+\emph{only consistently significant} feature source on both tasks is the
+simple \texttt{encoder\_mean}: 68.6\,\%\,$\pm$\,9.9 accuracy / 0.751 AUC on
+rest-vs-activity ($+11.7$\,pp over the no-pretraining control;
+$p{<}10^{-5}$) and 62.1\,\%\,$\pm$\,8.4 / 0.690 AUC on left-vs-right MI
+($+10.9$\,pp; $p{=}4{\times}10^{-4}$). All $p$-values are exact paired
+sign-flip permutation tests over the 20 LOSO folds, Benjamini--Hochberg
+corrected (\cref{sec:results:significance}).
+
+\begin{table*}[t]
+\caption{Linear-probe LOSO accuracy and AUC on EEGMMIDB across 20
+strictly held-out subjects (subjects~1--20; pretraining on 51--100).
+\emph{pre}~=~pretrained checkpoint; \emph{rnd}~=~random-initialized
+identical architecture. $\Delta$ is the pretrained$-$random accuracy gap;
+$q$ is the Benjamini--Hochberg-corrected $p$-value from the paired
+permutation test. Best per task in bold;
+\textsuperscript{$\dagger$} marks gaps that survive correction
+($q<0.05$).}
+\label{tab:headline}
+\centering
+\small
+\begin{tabular}{l l c c c c c}
+\toprule
+Task & Source & pre acc & pre AUC & rnd acc & $\Delta$ (pp) & $q$ \\
+\midrule
+left vs.\ right MI    & \textbf{encoder\_mean} & \textbf{0.621\,$\pm$\,0.084} & \textbf{0.690} & 0.512 & $\mathbf{+10.9}$\textsuperscript{$\dagger$} & 0.001 \\
+                      & predictor\_mean        & 0.606\,$\pm$\,0.082          & 0.623          & 0.596 & $+1.0$                                       & 0.81  \\
+                      & both\_mean             & 0.612\,$\pm$\,0.075          & 0.678          & 0.603 & $+0.9$                                       & 0.81  \\
+\midrule
+rest vs.\ activity    & \textbf{encoder\_mean} & \textbf{0.686\,$\pm$\,0.099} & \textbf{0.751} & 0.569 & $\mathbf{+11.7}$\textsuperscript{$\dagger$} & 1.5\textsc{e}-5 \\
+                      & predictor\_mean        & 0.673\,$\pm$\,0.088          & 0.756          & 0.618 & $+5.4$\textsuperscript{$\dagger$}            & 0.002 \\
+                      & both\_mean             & 0.679\,$\pm$\,0.100          & 0.757          & 0.638 & $+4.2$\textsuperscript{$\dagger$}            & 0.022 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+A clear pattern emerges. \texttt{encoder\_mean}---the simplest source,
+i.e.\ mean-pooled per-patch encoder embeddings with no temporal
+context---delivers the largest pretraining benefit on both tasks and is
+the only source whose gap over random is significant on the harder
+left-vs-right task ($+10.9$\,pp vs.\ $+1.0$ and $+0.9$\,pp, both n.s., for
+\texttt{predictor\_mean}/\texttt{both\_mean}). On rest-vs-activity all
+three sources beat random, but the gap is again largest for the encoder.
+We note that an earlier configuration that did not strictly hold out the
+evaluation subjects from pretraining produced a markedly larger and more
+predictor-favorable picture; under the leakage-free split reported here,
+the predictor-derived sources lose most of their apparent advantage,
+which we attribute to subject-level information having leaked through the
+predictor's temporal aggregation
+(\cref{sec:results:significance,sec:disc:predictor}).
+
+\subsection{Scaling behaviour}
+\label{sec:results:scaling}
+
+We characterise the small-scale regime by training six configurations
+spanning $\sim$$170\times$ in pretraining-data scale ($3$ to $109$
+subjects) and $150\times$ in step count ($200$ to $30{,}000$ steps).
+All operating points pretrain on subjects disjoint from the evaluation set
+(eval $=$ subjects 1--20; pretraining drawn from 21--109; the full-corpus
+points use the 89 subjects 21--109). \Cref{fig:scaling} plots best-source
+AUC on rest-vs-activity against \emph{total window-presentations}, defined
+as $N_\text{steps} \times \text{batch}$---the number of 4\,s EEG windows the
+optimizer consumed (counting repeats), on a logarithmic axis.
+
+\begin{figure}[t]
+  \centering
+  \IfFileExists{../runs/scaling_figure.png}
+    {\includegraphics[width=\columnwidth]{scaling_figure.png}}
+    {\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
+      \texttt{scaling\_figure.png} — generate via
+      \texttt{scripts/13\_scaling\_figure.py}\vspace{2em}}}}
+  \caption{Compact-regime scaling (leakage-free; eval subjects 1--20 held
+  out from all pretraining). Best-source rest-vs-activity LOSO AUC vs.\
+  total window-presentations ($N_\text{steps}\times\text{batch}$, log axis).
+  The base 2.86\,M model rises then plateaus near 0.76\,AUC; the
+  7\,M-parameter model (diamond) sits \emph{above} the plateau at matched
+  data and compute, indicating the base-model plateau reflects model
+  capacity rather than a hard data limit.}
+  \label{fig:scaling}
+\end{figure}
+
+Three observations frame the scaling picture. First, best-source AUC
+improves steeply over the first two orders of magnitude of compute, from
+0.710 at the 3-subject/200-step pilot to $\sim$0.76 by
+$\sim$3$\times$10$^{5}$ window-presentations. Second, the base model then
+\emph{plateaus} near 0.75--0.77\,AUC: the 50-subject/10k, 89-subject/10k,
+and 89-subject/30k runs all land in this band, and pushing the 89-subject
+corpus from 10k to 30k steps slightly \emph{lowers} AUC (0.768
+$\rightarrow$ 0.750), a mild SSL-overfitting effect at fixed corpus. At
+matched window-presentations, more subjects help (89-subject/10k $>$
+50-subject/10k), consistent with data still mattering within the base
+model's capacity. Third---and unlike the contaminated configuration we
+initially examined---the 2.4$\times$ larger 7\,M model trained on the same
+89-subject corpus reaches the highest AUC of all (0.774), sitting above the
+base-model plateau. The base-model plateau therefore reflects a
+\emph{capacity} limit at 2.86\,M parameters, not a hard data limit
+(\cref{sec:results:capacity}).
+
+\subsection{$\lambda$ ablation}
+\label{sec:results:lambda}
+
+We swept the SIGReg weight across
+$\lambda \in \{0, 0.1, 0.3, 1.0, 3.0, 10.0\}$ at our default training
+recipe (subjects 51--100, 10{,}000 steps, batch 64).
+\texttt{encoder\_mean} rest-vs-activity accuracy is summarised in
+Table~\ref{tab:lambda}.
+
+\begin{table}[t]
+\caption{SIGReg-weight ablation. \texttt{encoder\_mean} accuracy / AUC on
+EEGMMIDB rest-vs-activity LOSO, 20 held-out subjects. $\Delta$ is over the
+random-init baseline (0.569 acc). The $\lambda{=}0$ row is the SIGReg-off
+control; it collapses to exactly chance.}
+\label{tab:lambda}
+\centering
+\small
+\begin{tabular}{c c c c}
+\toprule
+$\lambda$ & accuracy & AUC & $\Delta$ (pp) \\
+\midrule
+0.0   & 0.500 & 0.500 & $-6.8$ \\
+0.1   & 0.649 & 0.711 & $+8.1$  \\
+0.3   & 0.678 & 0.738 & $+11.1$  \\
+\textbf{1.0} & \textbf{0.686} & \textbf{0.751} & \textbf{$+11.8$} \\
+3.0   & 0.671 & 0.731 & $+10.3$  \\
+10.0  & 0.619 & 0.661 & $+5.2$  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two findings are worth highlighting. First, $\lambda{=}1.0$ is a clean
+optimum: a 10$\times$ decrease ($\lambda{=}0.1$) costs $\sim$4\,pp accuracy
+and a 10$\times$ increase ($\lambda{=}10.0$) costs $\sim$7\,pp accuracy.
+The downstream-accuracy curve is U-shaped with a sharp minimum, but the
+training itself never destabilizes across the full 100$\times$ swing in
+$\lambda$, validating SIGReg's reported stability claim from the original
+LeJEPA paper.
+
+Second---and more importantly---the $\lambda{=}0$ run \emph{collapses to
+exactly chance accuracy} across both downstream tasks and all three
+feature sources. This is the JEPA-collapse failure mode that SIGReg was
+designed to prevent: without the distribution-matching regularizer, the
+model finds the trivial solution of mapping every input to the same
+embedding, and the linear probe receives no signal. The collapse is
+total, not partial, which makes it the empirically-cleanest possible
+validation of SIGReg's anti-collapse function. This complements the
+theoretical analysis of \cite{lejepa2025}.
+
+\subsection{Capacity test}
+\label{sec:results:capacity}
+
+To test whether the base-model plateau reflects a data limit or a capacity
+limit, we trained a 2.4$\times$ larger variant ($7$\,M parameters; encoder
+dim 256/mlp\_depth 3, predictor dim 256/depth 6) on the same leakage-free
+89-subject corpus (subjects 21--109) for 30{,}000 steps. To separate
+capacity from the SIGReg projection count $M$, we ran the larger model at
+two projection counts ($M{=}1024$ and $M{=}256$) and repeated both the base
+and large $M{=}1024$ configurations across three seeds (42--44). All
+variants trained stably.
+
+\begin{table}[t]
+\caption{Capacity test: base (2.86\,M params) vs.\ large (7\,M params),
+both trained leakage-free on the 89-subject corpus (subjects 21--109) for
+30{,}000 steps at matched SIGReg projection count $M{=}1024$. EEGMMIDB LOSO
+across 20 held-out subjects; accuracy as mean\,$\pm$\,std over three seeds
+(42--44). $\Delta$ is large $-$ base. The larger model wins on five of six
+cells and on both \texttt{encoder\_mean} (our primary source) rows.}
+\label{tab:capacity}
+\centering
+\small
+\begin{tabular}{l l c c c}
+\toprule
+Task & Source & base & large & $\Delta$ (pp) \\
+\midrule
+rva & \textbf{encoder\_mean}   & 0.678\,$\pm$\,0.008 & 0.692\,$\pm$\,0.011 & $+1.3$  \\
+rva & predictor\_mean & 0.681\,$\pm$\,0.005 & 0.690\,$\pm$\,0.010 & $+0.9$  \\
+rva & both\_mean      & 0.678\,$\pm$\,0.006 & 0.691\,$\pm$\,0.010 & $+1.3$  \\
+\midrule
+lr  & \textbf{encoder\_mean}   & 0.630\,$\pm$\,0.006 & 0.650\,$\pm$\,0.009 & $+2.0$  \\
+lr  & predictor\_mean & 0.598\,$\pm$\,0.017 & 0.617\,$\pm$\,0.011 & $+2.0$  \\
+lr  & both\_mean      & 0.642\,$\pm$\,0.006 & 0.641\,$\pm$\,0.007 & $-0.1$  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At matched projection count ($M{=}1024$) the larger model outperforms the
+base on five of six (task, source) cells (Table~\ref{tab:capacity}); on our
+primary \texttt{encoder\_mean} source it wins on both tasks ($+2.0$\,pp on
+left-vs-right, $+1.3$\,pp on rest-vs-activity). The margins are small but
+remarkably stable: on left-vs-right \texttt{encoder\_mean} every large-model
+seed (0.641--0.659) exceeds every base-model seed (0.623--0.636)---the two
+seed distributions do not overlap---despite a per-seed spread under 1\,pp.
+More capacity therefore helps at this data scale, and the base-model plateau
+of \cref{sec:results:scaling} is a (mild) capacity limit rather than a hard
+data limit. We nonetheless frame the effect as ``modestly better'' rather
+than a scaling law: the $\sim$1--2\,pp margins, though seed-stable, remain
+within the per-subject noise band.
+
+A separate run isolates why an earlier, contaminated version of this
+experiment (evaluation subjects present in pretraining; $M{=}256$ SIGReg
+slices) had shown the \emph{opposite} result, with the larger model
+appearing to regress. Holding architecture, data, and step count fixed and
+varying only the projection count, the large model's left-vs-right
+\texttt{encoder\_mean} accuracy collapses from 0.650 at $M{=}1024$ to 0.567
+at $M{=}256$---an 8.3\,pp drop that pushes it \emph{below} the base model
+(0.630) and reproduces the original ``large regresses'' artifact.
+Rest-vs-activity, the easier task, is nearly unaffected (0.692 $\to$ 0.687).
+The larger model's 256-dimensional embedding is under-regularized at
+$M{=}256$: the Cram\'er--Wold projection count must scale with embedding
+dimension, so the $M{=}256$ default that suffices for the 192-dimensional
+base model is not safe for wider encoders. We flag this as a practical
+pitfall when applying SIGReg-style isotropy regularizers across model
+widths.
+
+The practical takeaway is unchanged: the compact 2.86\,M model captures most
+of the achievable accuracy---within $\sim$1--2\,pp of the 2.4$\times$ larger
+model on \texttt{encoder\_mean}---while being markedly cheaper to store and
+run, the relevant trade-off for edge deployment.
+
+\subsection{Cross-dataset transfer}
+\label{sec:results:transfer}
+
+We evaluate cross-dataset transfer from EEGMMIDB (64 channels, motor
+imagery) to BCI-IV-2a (22 channels, four-class motor imagery) under two
+protocols: \emph{channel-padded} (the 64-channel pretrained encoder
+applied at inference with the 42 missing channels zero-padded), and
+\emph{channel-matched} (re-pretrain the same architecture on the 22-channel
+intersection of EEGMMIDB before probing BCI-IV-2a). Results appear in
+Table~\ref{tab:transfer}.
+
+\begin{table}[t]
+\caption{Cross-dataset transfer EEGMMIDB $\to$ BCI-IV-2a 4-class MI,
+LOSO across 9 subjects. $\Delta$ is accuracy over the random-initialized
+identical architecture (chance $=0.25$). The padded protocol applies the
+64-channel pretrained encoder and zero-pads the 42 missing channels at
+inference; the matched protocol re-pretrains on the 22-channel
+intersection. Higher $\Delta$ is better; the padded protocol wins on every
+source.}
+\label{tab:transfer}
+\centering
+\small
+\begin{tabular}{l c c c}
+\toprule
+Source & Padded $\Delta$ & Matched $\Delta$ & Padded $-$ Matched \\
+\midrule
+\textbf{encoder\_mean}   & $\mathbf{+4.9}$ & $+1.5$ & $+3.4$ \\
+predictor\_mean & $+4.2$ & $+0.4$ & $+3.8$ \\
+both\_mean      & $+2.0$ & $-1.5$ & $+3.5$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two findings stand out. First, pretraining transfers across datasets, but
+only modestly: the best configuration---\texttt{encoder\_mean} under the
+padded protocol---reaches 0.314 accuracy / 0.583 macro-AUC on the 4-class
+task ($+4.9$\,pp over the random-init control; chance $=0.25$). Absolute
+accuracy stays well below the within-dataset numbers of
+\cref{sec:results:headline}, consistent with our scope: we transfer to a
+channel \emph{subset} of the pretraining montage, and a fully disjoint
+layout would require the dynamic channel-mixing of \cite{laya2026}
+(\cref{sec:discussion}).
+
+Second, and more usefully for practitioners, the naive channel-padded
+protocol \emph{outperforms} channel-matched re-pretraining on every feature
+source (Table~\ref{tab:transfer}). On \texttt{encoder\_mean}, padding the
+full 64-channel encoder beats re-pretraining on the 22-channel intersection
+by 3.4\,pp ($+4.9$ vs.\ $+1.5$); the matched protocol even goes slightly
+negative on \texttt{both\_mean}. This is counterintuitive---training the
+encoder on the channel layout it will see at inference ``should'' help---but
+points to a representational-redundancy effect: the 64-channel encoder,
+trained on spatially redundant motor-cortex data, learns several spatial
+views of each underlying signal and degrades gracefully to one of them when
+the non-overlapping channels are zeroed, whereas the 22-channel encoder is
+forced into a tighter, less redundant representation that transfers less
+well to subjects with different spatial activation patterns. The practical
+recommendation is therefore to pretrain at the richest available channel
+topology and zero-pad at inference, rather than re-pretrain per downstream
+montage.
+
+\subsection{Per-subject variance}
+\label{sec:results:perfold}
+
+Figure~\ref{fig:perfold} shows the per-subject LOSO accuracy of the clean
+\texttt{encoder\_mean} checkpoint. Two subjects fall below chance on
+left-vs-right MI and one on rest-vs-activity---matching the
+supervised-from-scratch baseline (two and one, respectively). Per-fold
+standard deviation is comparable to or slightly above supervised
+(0.084 vs.\ 0.077 on left-vs-right; 0.099 vs.\ 0.072 on rest-vs-activity).
+SSL pretraining at this scale therefore neither reduces per-fold variance
+nor eliminates below-chance subjects; its advantage over supervised
+training is reuse across tasks (\cref{sec:results:supervised}), not
+per-subject robustness.
+
+\begin{figure}[t]
+  \centering
+  \IfFileExists{../runs/per_fold_figure.png}
+    {\includegraphics[width=\columnwidth]{per_fold_figure.png}}
+    {\fbox{\parbox{0.9\columnwidth}{\centering\vspace{2em}
+      \texttt{per\_fold\_figure.png} — generate via
+      \texttt{scripts/08\_per\_fold\_figure.py}\vspace{2em}}}}
+  \caption{Per-subject LOSO accuracy of the clean \texttt{encoder\_mean}
+  checkpoint on the two EEGMMIDB binary tasks (left: left-vs-right MI;
+  right: rest-vs-activity), pretrained vs.\ random-init, with chance and
+  mean reference lines.}
+  \label{fig:perfold}
+\end{figure}
+
+\subsection{Supervised comparison}
+\label{sec:results:supervised}
+
+To anchor the SSL$+$probe results against an end-to-end alternative,
+we trained the same encoder architecture from scratch with a linear
+classification head on each LOSO fold (cross-entropy, 500 steps, batch
+16, AdamW at $5{\times}10^{-4}$). Both pipelines use the
+identical 1.08\,M-parameter encoder.
+
+\begin{table}[t]
+\caption{SSL$+$linear probe (\texttt{encoder\_mean}) vs.\
+supervised-from-scratch on EEGMMIDB, LOSO across 20 held-out subjects,
+accuracy$\,\pm\,$std / AUC. $\Delta$ is the SSL$-$supervised accuracy
+gap; \textsuperscript{$\dagger$} marks $q<0.05$ (paired permutation,
+BH-corrected).}
+\label{tab:supervised}
+\centering
+\small
+\begin{tabular}{l c c c}
+\toprule
+Task & Supervised & SSL$+$probe & $\Delta$ (pp) \\
+\midrule
+left vs.\ right    & 0.623\,$\pm$\,0.077 / 0.707 & 0.621\,$\pm$\,0.084 / 0.690 & $-0.2$ \\
+rest vs.\ activity & 0.601\,$\pm$\,0.072 / 0.663 & 0.686\,$\pm$\,0.099 / 0.751 & $+8.4$\textsuperscript{$\dagger$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+SSL$+$probe ties supervised-from-scratch on left-vs-right MI ($-0.2$\,pp;
+not significant, $p{=}0.97$) and significantly exceeds it on
+rest-vs-activity ($+8.4$\,pp; $p{<}10^{-3}$, $q{=}4\times10^{-4}$). The
+per-fold standard deviation and below-chance counts are comparable across
+the two pipelines (\cref{sec:results:perfold}), so the value of SSL here is
+not lower variance but reuse: a single pretrained encoder serves both
+downstream tasks (and any future task) at sub-second per-task probing cost,
+whereas the supervised baseline retrains the full network per task.
+
+Compute economy makes the comparison even sharper. The supervised
+pipeline retrains the full network per LOSO fold and per task: $20$
+folds $\times 2$ tasks $= 40$ training runs at $\sim$45 seconds each on
+the M1. The SSL pipeline pretrains once (10 minutes on the RTX 5090),
+extracts features once per task ($<$10 seconds), then fits
+\texttt{LogisticRegression} per fold (sub-second). The pretrained
+encoder is reused across both downstream tasks; the supervised model is
+not.
+
+\subsection{Statistical significance}
+\label{sec:results:significance}
+
+Because per-fold standard deviations are large relative to several reported
+gaps, we test each headline difference for significance across the LOSO
+folds rather than relying on mean differences alone. For each comparison we
+compute the mean paired difference, a 95\,\% percentile bootstrap confidence
+interval (10{,}000 resamples), an exact paired sign-flip permutation
+$p$-value (full $2^{n}$ enumeration at $n{=}20$ folds), a Wilcoxon
+signed-rank $p$-value (normal approximation with tie and continuity
+correction) as a rank-based cross-check, and Cohen's $d_z$ effect size.
+Across the family of accuracy comparisons we control the false-discovery
+rate with the Benjamini--Hochberg procedure. The full procedure is
+implemented dependency-free in \texttt{scripts/12\_significance.py} (with a
+correctness self-test) and the table below is generated automatically from
+the per-fold outputs.
+After correction, both \texttt{encoder\_mean} gaps over random remain
+strongly significant ($q{=}0.001$ on left-vs-right MI; $q{=}1.5\times
+10^{-5}$ on rest-vs-activity). The \texttt{predictor\_mean} and
+\texttt{both\_mean} gaps on left-vs-right MI do \emph{not} survive
+correction ($q{>}0.8$), confirming that the apparent advantage of the
+predictor-derived sources was a function of the (now-removed) subject
+leakage rather than a robust effect.
+
+\IfFileExists{../runs/significance_table.tex}
+  {\input{../runs/significance_table.tex}}
+  {}

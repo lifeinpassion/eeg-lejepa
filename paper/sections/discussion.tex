@@ -1,0 +1,95 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{The simplest feature source is the most robust}
+\label{sec:disc:predictor}
+
+A methodological lesson emerges from the leakage-free evaluation.
+Mean-pooled per-patch encoder embeddings (\texttt{encoder\_mean})---the
+simplest feature source, with no temporal context---deliver the largest and
+only consistently significant pretraining benefit on both tasks
+($+10.9$ and $+11.7$\,pp over random; $q<0.002$). The predictor-derived
+sources (\texttt{predictor\_mean}, \texttt{both\_mean}) appeared stronger in
+an earlier configuration that did not strictly hold the evaluation subjects
+out of pretraining; under the corrected disjoint split their advantage on
+left-vs-right MI vanishes (gaps of $+1.0$ and $+0.9$\,pp, both
+non-significant). We attribute the inflation to subject-level information
+leaking through the causal predictor's temporal aggregation: when the same
+subjects appear in pretraining and evaluation, the predictor can encode
+subject-specific temporal regularities that the linear probe then exploits.
+The lesson generalizes beyond our setup---for cross-subject EEG evaluation,
+feature sources that aggregate temporal context warrant particular scrutiny
+for subject leakage, and a strictly held-out split is essential before
+attributing downstream gains to the pretraining objective. The plain encoder
+mean-pool, by contrast, is both the strongest and the most trustworthy
+source, consistent with the design philosophy of
+LeWorldModel~\cite{lewm2026}, which positions the predictor as a
+training-time helper rather than the deliberate downstream representation.
+
+\subsection{On-device deployment economics}
+
+A 2.86\,M-parameter model occupies $\sim$12\,MB in float32 and
+$\sim$3\,MB at INT4. Inference on an Apple M1 MPS device at our default
+4-second window takes well under 50\,ms per inference call. Both the
+parameter footprint and the latency are compatible with on-device
+deployment on the current generation of consumer EEG hardware (Muse 2,
+OpenBCI Cyton, Neurosity Crown, and Smartbuds-class earbud-format
+devices). The complete pretraining$+$probe pipeline runs in under 15
+minutes on a single consumer GPU at a total compute cost we estimate at
+under \$1 per run on commodity cloud GPU, making this recipe directly
+accessible to individual research labs and small startups. The
+compute differential against concurrent work---Laya pretrains for
+$\sim$$16\times$ more sample-views on two L40S GPUs~\cite{laya2026}---is
+real but the operating regimes are complementary rather than
+substitutable: foundation-scale pretraining buys cross-dataset
+generalization across many corpora, and compact pretraining buys
+single-corpus in-distribution accuracy at a budget realistic for
+applied research and edge deployment.
+
+\subsection{Limitations}
+
+We are upfront about four limitations. First, absolute downstream
+accuracy on motor imagery ($\sim$66\,\% on left-vs-right MI)
+lags task-specific BCI methods such as FBCSP~\cite{fbcsp2008} and
+EEGNet~\cite{eegnet2018}, which reach $\sim$70--75\,\% under
+within-subject training on similar data with $<$5{,}000 parameters. Our
+SSL$+$linear-probe pipeline trades absolute accuracy for cross-task
+reusability and edge deployability; we do not claim superiority over
+specialized supervised classifiers on a single task. Second, we pretrain
+on a single corpus (EEGMMIDB); our capacity comparison spans three seeds
+but a single larger width, so the modest advantage of the larger model is
+seed-stable yet should not be read as a scaling law; our recipe
+itself has not been validated against the multi-corpus regime that
+foundation models such as LaBraM~\cite{labram2024},
+EEGPT~\cite{eegpt2024}, NeuroLM~\cite{neurolm2025}, and
+Laya~\cite{laya2026} address; we frame the small-corpus regime as
+complementary rather than as a replacement. Third, we evaluate two
+datasets (EEGMMIDB and BCI-IV-2a). Clinical tasks (sleep staging,
+seizure detection, abnormal-EEG detection) on which Laya~\cite{laya2026}
+reports competitive results are not addressed by our recipe. Fourth, our
+cross-dataset transfer experiment covers only the case in which the
+downstream channel set is a subset of the pretraining channel set;
+transfer to disjoint channel layouts requires the alternative approach
+of Laya's Dynamic Channel Mixer~\cite[Sec.~3.3]{laya2026}.
+
+\subsection{Future work}
+
+Three directions are immediate. First, our isolation run shows the
+Cram\'er--Wold projection count $M$ must scale with embedding dimension
+(\cref{sec:results:capacity}); a fuller capacity/SIGReg-projection sweep
+(varying width and $M$ jointly across several widths) would pin down the
+exact scaling rule and map how far the accuracy/size frontier extends.
+Combined with scaling to TUH-EEG ($\sim$1{,}000$\times$ more data), this
+would test whether larger compact models keep paying off while preserving
+edge-deployability. Second, multi-corpus
+pretraining---mixing EEGMMIDB and BCI-IV-2a in the pretraining batch,
+together with the channel-padded transfer trick---may resolve the
+between-dataset performance gap we observed under channel-matched
+re-pretraining. Third, quantization-aware training for INT4 or INT8
+deployment on microcontroller-class hardware would close the
+on-device-deployment story end-to-end; per-fold variance suggests
+per-subject test-time adaptation (e.g., through TTT layers) could
+further stabilize cross-subject performance. The most interesting
+methodological extension---combining SIGReg's distribution-matching
+view with an ICA-style latent-source factorization of the
+embedding---is the subject of a forthcoming paper.

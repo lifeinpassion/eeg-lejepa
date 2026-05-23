@@ -1,0 +1,49 @@
+# In-domain seizure pretraining config (see INDOMAIN_PRETRAIN_PLAN.md).
+#
+# Use with a PRECOMPUTED corpus built by eeg-seizure's 04_build_pretrain_corpus.py:
+#   python scripts/04_train.py --config configs/seizure_indomain.yaml \
+#       --model-size compact --patch-size 64 \
+#       --npy ../eeg-seizure/data/pretrain/chbmit_interictal_P_256hz_4s.npz \
+#       --steps 20000 --batch-size 256 --bf16 --out runs/seizure-indomain-256-64-128
+#
+# With --npy the dataset/preprocessing blocks below are NOT used (the .npz is already
+# preprocessed + z-scored at 256 Hz); they are kept only to document the corpus tokenisation.
+
+paths:
+  data_root: data/raw
+  cache_root: data/cache
+  processed_root: data/processed
+  checkpoints: checkpoints
+  runs: runs
+
+dataset:
+  name: chbmit-interictal   # built externally by eeg-seizure; loaded via --npy
+  subjects: []              # unused with --npy
+  runs: []
+  sampling_rate_hz: 256
+  channels: null            # 22 bipolar full-montage channels (set by the corpus builder)
+
+preprocessing:              # documentation only when --npy is used
+  bandpass_low_hz: 0.5
+  bandpass_high_hz: 80.0    # < 128 Hz Nyquist at 256 Hz
+  notch_hz: 60.0            # CHB-MIT is US mains
+  reference: null           # CHB-MIT is already bipolar; no re-reference
+  resample_hz: 256          # match the detector's native rate (patch_size 64 = 0.25 s)
+  epoch_length_s: 4.0       # 4 s window -> 1024 samples -> 16 patches at patch_size 64
+  epoch_overlap_s: 2.0
+
+training:
+  seed: 42
+  device: auto              # auto picks cuda > mps > cpu
+  n_steps: 20000            # starting point; watch for saturation (Session-8 finding)
+  batch_size: 256           # large batch helps SIGReg on GPU
+  learning_rate: 1.0e-3
+  weight_decay: 0.05
+  warmup_steps: 200
+  grad_clip: 1.0
+  log_every: 50
+  ckpt_every: 0
+
+reproducibility:
+  deterministic: true
+  set_global_seed: true

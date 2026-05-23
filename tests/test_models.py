@@ -86,6 +86,20 @@ def test_jepa_forward_returns_all_keys() -> None:
         assert torch.isfinite(out[k]), f"{k} is not finite: {out[k]}"
 
 
+def test_compact_preset_matches_seizure_detector_tokenisation() -> None:
+    """compact() at 22 ch / patch 64 must yield the eeg-seizure detector's 256/64/128 shapes."""
+    cfg = EEGLeJEPAConfig.compact()
+    cfg.encoder.n_channels = 22
+    cfg.encoder.patch_size = 64
+    assert cfg.encoder.embed_dim == 128 and cfg.predictor.embed_dim == 128
+    model = EEGLeJEPA(cfg)
+    model.eval()
+    x = _make_input(b=2, c=22, t=1024)            # 4 s @ 256 Hz
+    out = model(x)
+    assert out["embeddings"].shape == (2, 16, 128)   # 1024 / 64 = 16 patches
+    assert out["predictions"].shape == (2, 16, 128)
+
+
 def test_jepa_backward_yields_finite_gradients() -> None:
     model = EEGLeJEPA(EEGLeJEPAConfig(sigreg_num_slices=32))  # small for speed
     model.train()

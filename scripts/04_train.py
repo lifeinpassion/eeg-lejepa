@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
 import yaml
 from rich.console import Console
 
@@ -39,8 +40,15 @@ def parse_args() -> argparse.Namespace:
                    help="Override config run list (e.g. --runs 4 8 12 to use MI-only data)")
     p.add_argument("--out", type=Path, default=Path("runs/eeg-lejepa-dev"),
                    help="Output directory for logs + checkpoints")
-    p.add_argument("--model-size", choices=["base", "large"], default="base",
-                   help="Architecture preset: base ≈ 2.86M params (default), large ≈ 7M params")
+    p.add_argument("--model-size", choices=["base", "large", "compact"], default="base",
+                   help="Architecture preset: base ≈ 2.86M (default), large ≈ 7M, "
+                        "compact = embed_dim 128 to match the eeg-seizure detector")
+    p.add_argument("--patch-size", type=int, default=40,
+                   help="Encoder patch size in samples (default 40 = 0.25 s @ 160 Hz). "
+                        "Use 64 for the seizure-aligned 256 Hz corpus.")
+    p.add_argument("--npy", type=Path, default=None,
+                   help="Load a precomputed (epochs, channels, samples) corpus .npz (key 'X') "
+                        "instead of building EEGMMIDB — e.g. eeg-seizure's interictal corpus.")
     p.add_argument("--warmup-steps", type=int, default=None,
                    help="Override LR-warmup step count (default from config; bump for larger models)")
     p.add_argument("--channel-subset", default=None,
@@ -59,49 +67,59 @@ def parse_args() -> argparse.Namespace:
                    help="Override SIGReg num_slices (default 256; paper default 1024)")
     p.add_argument("--predictor-depth", type=int, default=None,
                    help="Override predictor depth (default 4; try 2 to reduce shortcut capacity)")
+    p.add_argument("--seed", type=int, default=None,
+                   help="Override the global random seed (for multi-seed runs).")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = yaml.safe_load(args.config.read_text())
-    set_global_seed(cfg["training"]["seed"], deterministic=False)
+    seed = args.seed if args.seed is not None else cfg["training"]["seed"]
+    set_global_seed(seed, deterministic=False)
     device = get_device(args.device if args.device else cfg["training"]["device"])
 
-    subjects = args.subjects if args.subjects is not None else cfg["dataset"]["subjects"]
-    runs = args.runs if args.runs is not None else cfg["dataset"]["runs"]
-
     # 1. Data
-    pp = PreprocessingConfig(
-        bandpass_low_hz=cfg["preprocessing"]["bandpass_low_hz"],
-        bandpass_high_hz=cfg["preprocessing"]["bandpass_high_hz"],
-        notch_hz=cfg["preprocessing"]["notch_hz"],
-        reference=cfg["preprocessing"]["reference"],
-        resample_hz=cfg["preprocessing"]["resample_hz"],
-        epoch_length_s=cfg["preprocessing"]["epoch_length_s"],
-        epoch_overlap_s=cfg["preprocessing"]["epoch_overlap_s"],
-    )
-    # Resolve --channel-subset
-    channel_subset: list[str] | None = None
-    if args.channel_subset is not None:
-        if args.channel_subset.lower() in ("bci-iv-2a", "bci_iv_2a", "bci_iv2a"):
-            from eeg_slm.data.bci_iv_2a import BCI_IV_2A_EEG_CHANNELS
-            channel_subset = list(BCI_IV_2A_EEG_CHANNELS)
-        else:
-            channel_subset = [c.strip() for c in args.channel_subset.split(",") if c.strip()]
+    if args.npy is not None:
+        # Precomputed, already-preprocessed corpus (e.g. eeg-seizure's interictal .npz).
+        npz = np.load(args.npy, allow_pickle=True)
+        X = npz["X"]
+        console.print(f"[bold]Loaded precomputed corpus[/bold] {args.npy} → "
+                      f"{X.shape} (epochs, channels, samples)")
+        dataset = EEGTensorDataset(X)
+    else:
+        subjects = args.subjects if args.subjects is not None else cfg["dataset"]["subjects"]
+        runs = args.runs if args.runs is not None else cfg["dataset"]["runs"]
+        pp = PreprocessingConfig(
+            bandpass_low_hz=cfg["preprocessing"]["bandpass_low_hz"],
+            bandpass_high_hz=cfg["preprocessing"]["bandpass_high_hz"],
+            notch_hz=cfg["preprocessing"]["notch_hz"],
+            reference=cfg["preprocessing"]["reference"],
+            resample_hz=cfg["preprocessing"]["resample_hz"],
+            epoch_length_s=cfg["preprocessing"]["epoch_length_s"],
+            epoch_overlap_s=cfg["preprocessing"]["epoch_overlap_s"],
+        )
+        # Resolve --channel-subset
+        channel_subset: list[str] | None = None
+        if args.channel_subset is not None:
+            if args.channel_subset.lower() in ("bci-iv-2a", "bci_iv_2a", "bci_iv2a"):
+                from eeg_slm.data.bci_iv_2a import BCI_IV_2A_EEG_CHANNELS
+                channel_subset = list(BCI_IV_2A_EEG_CHANNELS)
+            else:
+                channel_subset = [c.strip() for c in args.channel_subset.split(",") if c.strip()]
 
-    console.print(f"[bold]Building pretraining tensor[/bold] from "
-                  f"subjects={subjects}, runs={runs}")
-    if channel_subset is not None:
-        console.print(f"  channel-subset: {len(channel_subset)} channels — "
-                      f"{channel_subset[:5]}{' ...' if len(channel_subset) > 5 else ''}")
-    X = build_eegmmidb_pretraining_tensor(
-        subjects=subjects, runs=runs,
-        data_root=cfg["paths"]["data_root"], preprocessing=pp,
-        channel_subset=channel_subset,
-    )
-    console.print(f"  → {X.shape} (epochs, channels, samples)")
-    dataset = EEGTensorDataset(X)
+        console.print(f"[bold]Building pretraining tensor[/bold] from "
+                      f"subjects={subjects}, runs={runs}")
+        if channel_subset is not None:
+            console.print(f"  channel-subset: {len(channel_subset)} channels — "
+                          f"{channel_subset[:5]}{' ...' if len(channel_subset) > 5 else ''}")
+        X = build_eegmmidb_pretraining_tensor(
+            subjects=subjects, runs=runs,
+            data_root=cfg["paths"]["data_root"], preprocessing=pp,
+            channel_subset=channel_subset,
+        )
+        console.print(f"  → {X.shape} (epochs, channels, samples)")
+        dataset = EEGTensorDataset(X)
 
     # 2. DataLoader
     from torch.utils.data import DataLoader
@@ -120,10 +138,14 @@ def main() -> None:
                   f"pin_memory={device == 'cuda'}")
 
     # 3. Model
-    model_cfg = (EEGLeJEPAConfig.large() if args.model_size == "large"
-                 else EEGLeJEPAConfig.base())
+    if args.model_size == "large":
+        model_cfg = EEGLeJEPAConfig.large()
+    elif args.model_size == "compact":
+        model_cfg = EEGLeJEPAConfig.compact()
+    else:
+        model_cfg = EEGLeJEPAConfig.base()
     model_cfg.encoder.n_channels = dataset.n_channels
-    model_cfg.encoder.patch_size = 40
+    model_cfg.encoder.patch_size = args.patch_size
     model_cfg.sigreg_num_slices = args.sigreg_slices if args.sigreg_slices is not None else 256
     if args.sigreg_weight is not None:
         model_cfg.sigreg_weight = args.sigreg_weight
@@ -149,7 +171,7 @@ def main() -> None:
         grad_clip=cfg["training"].get("grad_clip", 1.0),
         log_every=cfg["training"].get("log_every", 10),
         use_bf16=args.bf16,
-        seed=cfg["training"]["seed"],
+        seed=seed,
         output_dir=args.out,
     )
     result = train(model, loader, train_cfg, device=device)

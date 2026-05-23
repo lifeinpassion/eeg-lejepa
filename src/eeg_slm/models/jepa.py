@@ -46,6 +46,20 @@ class EEGLeJEPAConfig:
         return cls()
 
     @classmethod
+    def compact(cls) -> "EEGLeJEPAConfig":
+        """embed_dim=128 variant that matches the eeg-seizure detector's reused encoder.
+
+        The seizure ``DetectorConfig`` defaults to embed_dim=128 / patch_size=64 @ 256 Hz; an
+        encoder pretrained with this preset (and ``--patch-size 64``) drops verbatim into that
+        detector with no config overrides. See ../eeg-seizure + INDOMAIN_PRETRAIN_PLAN.md.
+        Encoder: embed_dim=128, mlp_depth=2. Predictor: dim=128, depth=4, heads=4 (head_dim 32).
+        """
+        cfg = cls()
+        cfg.encoder.embed_dim = 128
+        cfg.predictor.embed_dim = 128   # must match encoder (enforced in __init__)
+        return cfg
+
+    @classmethod
     def large(cls) -> "EEGLeJEPAConfig":
         """~7M-parameter variant — tests whether the Session-8 ~19M sample-exposure
         saturation was a model-capacity limit.

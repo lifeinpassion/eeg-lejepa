@@ -3,6 +3,7 @@
 Phase 1: EEGLeJEPA — small JEPA-style predictive world model for EEG with SIGReg.
 """
 
+from eeg_slm.models.classifier import EEGClassifier, EEGClassifierConfig
 from eeg_slm.models.encoder import EEGEncoder, EncoderConfig, PerPatchMLP
 from eeg_slm.models.jepa import EEGLeJEPA, EEGLeJEPAConfig
 from eeg_slm.models.predictor import EEGPredictor, PredictorConfig
@@ -18,6 +19,8 @@ from eeg_slm.models.transformer import (
 )
 
 __all__ = [
+    "EEGClassifier",
+    "EEGClassifierConfig",
     "EEGEncoder",
     "EncoderConfig",
     "PerPatchMLP",
