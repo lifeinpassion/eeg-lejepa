@@ -1,0 +1,110 @@
+\documentclass[10pt,a4paper]{article}
+
+% -------- Fonts & layout (Extrica: Times, 10 pt, 15 mm margins) --------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{mathptmx}                      % Times text + math
+\usepackage[margin=15mm]{geometry}
+\usepackage{setspace}\singlespacing
+
+% -------- Packages --------
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\graphicspath{{figures/}{../runs/}{runs/}}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage{caption}
+% Extrica caption style: "Fig. 1. Description" / "Table 1. Description"
+\captionsetup[figure]{name=Fig.,labelsep=period,font=small}
+\captionsetup[table]{name=Table,labelsep=period,font=small}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise]{cleveref}
+% Cross-reference wording per Extrica: Fig. 1 / Table 1 / Eq. (1)
+\crefname{figure}{Fig.}{Figs.}      \Crefname{figure}{Fig.}{Figs.}
+\crefname{table}{Table}{Tables}     \Crefname{table}{Table}{Tables}
+\crefname{equation}{Eq.}{Eqs.}      \Crefname{equation}{Eq.}{Eqs.}
+\crefformat{equation}{Eq.~(#2#1#3)} \Crefformat{equation}{Eq.~(#2#1#3)}
+\crefname{section}{Section}{Sections}       \Crefname{section}{Section}{Sections}
+\crefname{subsection}{Section}{Sections}    \Crefname{subsection}{Section}{Sections}
+\crefname{algorithm}{Algorithm}{Algorithms} \Crefname{algorithm}{Algorithm}{Algorithms}
+
+% Editorial markers are off in the submission build (no-ops).
+\providecommand{\todo}[1]{}
+\providecommand{\note}[1]{}
+
+\providecommand{\IEEEPARstart}[2]{#1#2}
+
+\begin{document}
+
+% -------- Title block (Extrica: full names, affiliations, all emails, corresponding author identified) --------
+\title{\bfseries Edge-Deployable EEG Foundation Models: Scaling Laws and Cross-Dataset Transfer for Compact SIGReg-Pretrained Encoders}
+\author{%
+  Ping Liang$^{1}$, Anton Louise P. De Ocampo$^{1,*}$\\[6pt]
+  \normalsize $^{1}$Department of Electronics Engineering, Batangas State
+  University, Batangas City 4200, Philippines\\[3pt]
+  \normalsize E-mail: 22-07901@g.batstate-u.edu.ph (P.~Liang);
+  antonlouise.deocampo@ieee.org (A.~L.~P.~De Ocampo)\\[3pt]
+  \normalsize $^{*}$Corresponding author%
+}
+\date{}
+\maketitle
+
+% -------- Abstract (citation-free, 150-250 words) + Keywords (4-8) --------
+\input{sections/abstract.tex}
+
+\vspace{4pt}
+\noindent\textbf{Keywords:} EEG; brain--computer interface; self-supervised learning; joint-embedding predictive architecture; mathematical models in engineering; edge deployment; motor imagery; scaling laws.
+
+% -------- Body sections (shared with main.tex / main_bspc.tex / main_jsps.tex) --------
+\input{sections/introduction.tex}
+\input{sections/related.tex}
+\input{sections/method.tex}
+\input{sections/experiments.tex}
+\input{sections/results.tex}
+\input{sections/discussion.tex}
+\input{sections/conclusion.tex}
+
+% -------- Extrica back-matter block --------
+\section*{Acknowledgements}
+This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors.
+
+\section*{Data availability}
+All datasets used in this study are publicly available: the PhysioNet EEG Motor Movement/Imagery Database (EEGMMIDB) and the BCI Competition~IV Dataset~2a. Code, configurations, trained checkpoints, and per-fold outputs
+are released at \url{https://github.com/lifeinpassion/eeg-lejepa}.
+
+\section*{Author contributions}
+\textbf{Ping Liang:} Software, Investigation, Formal Analysis, Data Curation, Visualization, Writing -- Original Draft Preparation. \textbf{Anton Louise P.
+De Ocampo:} Conceptualization, Methodology, Supervision, Project Administration, Writing -- Review and Editing. All authors have read and
+agreed to the published version of the manuscript.
+
+\section*{Conflict of interest}
+The authors declare no conflicts of interest.
+
+\section*{Ethics statement}
+The research adhered to all applicable laws and ethics standards. This study used only publicly available, de-identified datasets (the PhysioNet EEG Motor Movement/Imagery Database and the BCI Competition~IV Dataset~2a); no new data were collected from human participants, and therefore no ethics committee approval or informed consent was required.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\section*{Biographies}
+\noindent
+\begin{tabular}{@{}p{2.8cm} p{\dimexpr\textwidth-3.0cm\relax}@{}}
+  \IfFileExists{bio_liang.jpg}%
+    {\includegraphics[width=2.5cm]{bio_liang.jpg}}%
+    {\fbox{\parbox[c][3.2cm][c]{2.3cm}{\centering\small photo}}}
+  &
+  \textbf{Ping Liang} is currently pursuing Ph.D. in Electronics Engineering in the Department of Electronics Engineering at Batangas State University, Batangas City, Philippines. He is an IEEE Member. His research interests include self-supervised representation learning for biosignals, EEG-based brain--computer interfaces, and edge-deployable deep learning.
+  \\[10pt]
+  \IfFileExists{bio_deocampo.jpg}%
+    {\includegraphics[width=2.5cm]{bio_deocampo.jpg}}%
+    {\fbox{\parbox[c][3.2cm][c]{2.3cm}{\centering\small photo}}}
+  &
+  \textbf{Anton Louise P. De Ocampo} received the Ph.D. in Electronics and Communications Engineering degree from De La Salle University, Philippines in 2020. He is currently with the Department of Electronics Engineering, Batangas State University, Batangas City, Philippines. His research interests include machine learning for signal processing and estimation.
+\end{tabular}
+
+\end{document}
